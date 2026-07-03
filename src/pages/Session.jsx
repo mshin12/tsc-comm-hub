@@ -34,9 +34,7 @@ export default function Session() {
   const [sessionEnded, setSessionEnded] = useState(false);
  
   // Data to hand off to the session log form once the session completes
-  const [sessionId, setSessionId] = useState(null);
   const [scenarioUsed, setScenarioUsed] = useState('');
-  const [isStarting, setIsStarting] = useState(false);
  
   const messageListRef = useRef(null);
   const sessionStartTimeRef = useRef(null);
@@ -99,7 +97,7 @@ export default function Session() {
     }
   }, [messages]);
  
-  const handleStartSession = async () => {
+  const handleStartSession = () => {
     const selectedPrompt = prompts.find(
       (prompt) => String(prompt.id) === String(selectedPromptId)
     );
@@ -115,38 +113,9 @@ export default function Session() {
     }
  
     setError('');
-    setIsStarting(true);
- 
-    const finalPrompt = assemblePrompt(
-      selectedPrompt.system_prompt,
-      individual
-    );
- 
-    const startTime = Date.now();
- 
-    const { data: sessionRow, error: insertError } = await supabase
-      .from('sessions')
-      .insert({
-        individual_id: individualId,
-        staff_id: user.id,
-        session_date: new Date(startTime).toISOString(),
-        tier_used: individual.communication_tier,
-        scenario_used: selectedPrompt.scenario_name,
-      })
-      .select()
-      .single();
- 
-    setIsStarting(false);
- 
-    if (insertError || !sessionRow) {
-      setError('Could not start the session. Please try again.');
-      return;
-    }
- 
-    sessionStartTimeRef.current = startTime;
-    setSessionId(sessionRow.id);
+    sessionStartTimeRef.current = Date.now();
     setScenarioUsed(selectedPrompt.scenario_name);
-    setAssembledPrompt(finalPrompt);
+    setAssembledPrompt(assemblePrompt(selectedPrompt.system_prompt, individual));
     setSessionActive(true);
   };
  
@@ -205,11 +174,14 @@ export default function Session() {
       ? Math.round((Date.now() - sessionStartTimeRef.current) / 60000)
       : null;
  
-    navigate('/session/' + sessionId + '/log', {
+    navigate('/session/' + individualId + '/log', {
       state: {
         individual_id: individualId,
         staff_id: user ? user.id : null,
         scenario_used: scenarioUsed,
+        session_date: sessionStartTimeRef.current
+          ? new Date(sessionStartTimeRef.current).toISOString()
+          : new Date().toISOString(),
         session_length: elapsedMinutes,
         messages,
       },
@@ -272,9 +244,9 @@ export default function Session() {
             type="button"
             style={styles.primaryButton}
             onClick={handleStartSession}
-            disabled={!selectedPromptId || isStarting}
+            disabled={!selectedPromptId}
           >
-            {isStarting ? 'Starting...' : 'Start Session'}
+            Start Session
           </button>
         </div>
       )}
