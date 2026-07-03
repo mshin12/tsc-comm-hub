@@ -5,6 +5,10 @@ import { assemblePrompt } from '../lib/assemblePrompt';
 import { useAuth } from '../hooks/useAuth';
  
 const END_SESSION_KEYWORD = 'END SESSION';
+
+function isEndSessionText(text) {
+  return text.trim().replace(/[.!?]+$/, '').toUpperCase() === END_SESSION_KEYWORD;
+}
  
 const TIER_COLORS = {
   1: { backgroundColor: '#dbeafe', color: '#1e40af' },
@@ -32,6 +36,7 @@ export default function Session() {
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState('');
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [lastFailedTurn, setLastFailedTurn] = useState(null);
  
   // Data to hand off to the session log form once the session completes
   const [sessionId, setSessionId] = useState(null);
@@ -158,20 +163,10 @@ export default function Session() {
     setSessionActive(true);
   };
  
-  const handleSend = async () => {
-    const trimmed = inputText.trim();
-    if (!trimmed || isSending) return;
- 
-    const isEndSession = trimmed === END_SESSION_KEYWORD;
- 
-    const userMessage = { role: 'user', content: trimmed };
-    const updatedMessages = [...messages, userMessage];
- 
-    setMessages(updatedMessages);
-    setInputText('');
+  const sendConversation = async (updatedMessages, isEndSession) => {
     setChatError('');
     setIsSending(true);
- 
+
     try {
       const {
         data: { session },
@@ -190,24 +185,76 @@ export default function Session() {
           systemPrompt: assembledPrompt,
         }),
       });
- 
-      const data = await response.json();
- 
+
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json')
+        ? await response.json()
+        : null;
+
       if (!response.ok) {
-        throw new Error(data?.error || 'The assistant could not respond.');
+        throw new Error(data?.error || 'The assistant could not respond. Please try again.');
       }
- 
-      const assistantMessage = { role: 'assistant', content: data.text };
-      setMessages((prev) => [...prev, assistantMessage]);
- 
+
+      if (!data) {
+        throw new Error('Received an unexpected response from the server. Please try again.');
+      }
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: data.text,
+        truncated: !!data.truncated,
+      };
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
+      setLastFailedTurn(null);
+
+      if (sessionId) {
+        const { error: transcriptError } = await supabase
+          .from('sessions')
+          .update({ transcript: finalMessages })
+          .eq('id', sessionId);
+        if (transcriptError) {
+          console.error('Could not save transcript:', transcriptError);
+        }
+      }
+
       if (isEndSession) {
         setSessionEnded(true);
       }
     } catch (err) {
       setChatError(err.message || 'Something went wrong. Please try again.');
+      setLastFailedTurn({ messages: updatedMessages, isEndSession });
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSend = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isSending) return;
+
+    const isEndSession = isEndSessionText(trimmed);
+    const userMessage = { role: 'user', content: trimmed };
+    const updatedMessages = [...messages, userMessage];
+
+    setMessages(updatedMessages);
+    setInputText('');
+    sendConversation(updatedMessages, isEndSession);
+  };
+
+  const handleEndSessionClick = () => {
+    if (isSending) return;
+
+    const userMessage = { role: 'user', content: END_SESSION_KEYWORD };
+    const updatedMessages = [...messages, userMessage];
+
+    setMessages(updatedMessages);
+    sendConversation(updatedMessages, true);
+  };
+
+  const handleRetry = () => {
+    if (!lastFailedTurn) return;
+    sendConversation(lastFailedTurn.messages, lastFailedTurn.isEndSession);
   };
  
   const handleKeyDown = (e) => {
@@ -227,7 +274,6 @@ export default function Session() {
         individual_id: individualId,
         scenario_used: scenarioUsed,
         session_length: elapsedMinutes,
-        messages,
       },
     });
   };
@@ -267,31 +313,40 @@ export default function Session() {
  
       {!sessionActive && (
         <div style={styles.setupPanel}>
-          <label style={styles.label} htmlFor="scenario-select">
-            Choose a scenario
-          </label>
-          <select
-            id="scenario-select"
-            value={selectedPromptId}
-            onChange={(e) => setSelectedPromptId(e.target.value)}
-            style={styles.select}
-          >
-            <option value="">-- Select a scenario --</option>
-            {prompts.map((prompt) => (
-              <option key={prompt.id} value={prompt.id}>
-                {prompt.scenario_name}
-              </option>
-            ))}
-          </select>
- 
-          <button
-            type="button"
-            style={styles.primaryButton}
-            onClick={handleStartSession}
-            disabled={!selectedPromptId || isStarting}
-          >
-            {isStarting ? 'Starting...' : 'Start Session'}
-          </button>
+          {prompts.length === 0 ? (
+            <p style={styles.text}>
+              No active scenarios are available for this individual's tier yet.
+              Please contact your program coordinator.
+            </p>
+          ) : (
+            <>
+              <label style={styles.label} htmlFor="scenario-select">
+                Choose a scenario
+              </label>
+              <select
+                id="scenario-select"
+                value={selectedPromptId}
+                onChange={(e) => setSelectedPromptId(e.target.value)}
+                style={styles.select}
+              >
+                <option value="">-- Select a scenario --</option>
+                {prompts.map((prompt) => (
+                  <option key={prompt.id} value={prompt.id}>
+                    {prompt.scenario_name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                style={styles.primaryButton}
+                onClick={handleStartSession}
+                disabled={!selectedPromptId || isStarting}
+              >
+                {isStarting ? 'Starting...' : 'Start Session'}
+              </button>
+            </>
+          )}
         </div>
       )}
  
@@ -322,6 +377,11 @@ export default function Session() {
                   }}
                 >
                   {message.content}
+                  {message.truncated && (
+                    <div style={styles.truncatedNote}>
+                      This response may have been cut short.
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -333,7 +393,21 @@ export default function Session() {
             )}
           </div>
  
-          {chatError && <div style={styles.errorBanner}>{chatError}</div>}
+          {chatError && (
+            <div style={styles.errorBanner}>
+              {chatError}
+              {lastFailedTurn && (
+                <button
+                  type="button"
+                  style={styles.retryButton}
+                  onClick={handleRetry}
+                  disabled={isSending}
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
  
           {!sessionEnded ? (
             <div style={styles.inputRow}>
@@ -342,7 +416,7 @@ export default function Session() {
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isSending}
-                placeholder="Type a message... (type END SESSION to finish)"
+                placeholder="Type a message..."
                 style={styles.textInput}
                 rows={2}
               />
@@ -353,6 +427,14 @@ export default function Session() {
                 disabled={isSending || !inputText.trim()}
               >
                 {isSending ? 'Sending...' : 'Send'}
+              </button>
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={handleEndSessionClick}
+                disabled={isSending}
+              >
+                End Session
               </button>
             </div>
           ) : (
@@ -433,6 +515,11 @@ const styles = {
     border: '1px solid #e5e7eb',
     borderRadius: 8,
   },
+  text: {
+    fontSize: 14,
+    color: '#374151',
+    margin: 0,
+  },
   label: {
     display: 'block',
     marginBottom: 6,
@@ -509,6 +596,33 @@ const styles = {
     color: '#6b7280',
     fontStyle: 'italic',
     padding: '4px 8px',
+  },
+  truncatedNote: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: '#9ca3af',
+    marginTop: 4,
+  },
+  retryButton: {
+    padding: '6px 12px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#a94442',
+    backgroundColor: '#fff',
+    border: '1px solid #ebccd1',
+    borderRadius: 4,
+    cursor: 'pointer',
+    marginLeft: 10,
+  },
+  secondaryButton: {
+    padding: '10px 16px',
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#2563eb',
+    backgroundColor: '#fff',
+    border: '1px solid #2563eb',
+    borderRadius: 4,
+    cursor: 'pointer',
   },
   inputRow: {
     display: 'flex',

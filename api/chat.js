@@ -1,8 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
-const anthropic = new Anthropic();
-
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.VITE_SUPABASE_ANON_KEY
@@ -37,18 +35,29 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: '"systemPrompt" must be a string.' });
   }
  
+  let anthropic;
+  try {
+    anthropic = new Anthropic();
+  } catch (configError) {
+    console.error('Anthropic client configuration error:', configError);
+    return res.status(500).json({
+      error: 'The assistant is not configured correctly. Please contact your administrator.',
+    });
+  }
+
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
       messages,
     });
- 
+
     const textBlock = response.content.find((block) => block.type === 'text');
     const text = textBlock ? textBlock.text : '';
- 
-    return res.status(200).json({ text });
+    const truncated = response.stop_reason === 'max_tokens';
+
+    return res.status(200).json({ text, truncated });
   } catch (error) {
     console.error('Anthropic API error:', error);
     return res.status(500).json({

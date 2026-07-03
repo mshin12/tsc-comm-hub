@@ -36,6 +36,16 @@ export default function SessionLog() {
 
   const handleSubmit = async () => {
     setError('');
+
+    const hasContent = [wentWell, challengeNoted, goalMoment, staffNotes].some(
+      (value) => value.trim() !== ''
+    );
+
+    if (!hasContent) {
+      setError('Please fill in at least one field before saving.');
+      return;
+    }
+
     setSubmitting(true);
 
     const { data: updatedRow, error: updateError } = await supabase

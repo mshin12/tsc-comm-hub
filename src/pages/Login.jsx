@@ -49,7 +49,8 @@ export default function Login() {
         .single();
  
       if (profileError || !profile) {
-        setError('Could not load your account details. Please try again.');
+        await supabase.auth.signOut();
+        setError('Could not load your account details. Please contact your administrator.');
         setLoading(false);
         return;
       }
@@ -60,6 +61,7 @@ export default function Login() {
       } else if (profile.role === 'family') {
         navigate('/family');
       } else {
+        await supabase.auth.signOut();
         setError('Your account role is not recognized. Please contact support.');
       }
     } catch (err) {

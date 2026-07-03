@@ -35,32 +35,16 @@ export default function FamilyView() {
       setLoading(true);
       setError('');
 
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('family_user_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!isMounted) return;
-
-      if (userError || !userData?.family_user_id) {
-        setError('Could not find a linked individual for your account.');
-        setLoading(false);
-        return;
-      }
-
-      const individualId = userData.family_user_id;
-
       const { data: individualData, error: individualError } = await supabase
         .from('individuals')
-        .select('full_name, goals, communication_tier')
-        .eq('id', individualId)
+        .select('id, full_name, goals, communication_tier')
+        .eq('family_user_id', user.id)
         .single();
 
       if (!isMounted) return;
 
       if (individualError || !individualData) {
-        setError("Could not load the individual's profile.");
+        setError('Could not find a linked individual for your account.');
         setLoading(false);
         return;
       }
@@ -70,7 +54,7 @@ export default function FamilyView() {
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions_family_view')
         .select('session_date, scenario_used, family_summary')
-        .eq('individual_id', individualId)
+        .eq('individual_id', individualData.id)
         .order('session_date', { ascending: false })
         .limit(10);
 
@@ -131,9 +115,11 @@ export default function FamilyView() {
       <div style={styles.section}>
         <h2 style={styles.sectionTitle}>Session History</h2>
         {sessions.length === 0 ? (
-          <p style={styles.emptyMessage}>
-            Sessions will appear here after your first visit.
-          </p>
+          !error && (
+            <p style={styles.emptyMessage}>
+              Sessions will appear here after your first visit.
+            </p>
+          )
         ) : (
           <div style={styles.sessionList}>
             {sessions.map((session, index) => (
