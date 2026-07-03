@@ -23,7 +23,7 @@ function formatDate(dateString) {
 export default function IndividualProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
  
   const [individual, setIndividual] = useState(null);
   const [sessions, setSessions] = useState([]);
@@ -43,8 +43,13 @@ export default function IndividualProfile() {
       setLoading(true);
       setError('');
  
+      let individualQuery = supabase.from('individuals').select('*').eq('id', id);
+      if (role !== 'admin') {
+        individualQuery = individualQuery.contains('assigned_staff', [user.id]);
+      }
+
       const [individualResult, sessionsResult] = await Promise.all([
-        supabase.from('individuals').select('*').eq('id', id).single(),
+        individualQuery.single(),
         supabase
           .from('sessions')
           .select('*')
@@ -80,7 +85,7 @@ export default function IndividualProfile() {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user, id]);
+  }, [authLoading, user, role, id]);
  
   if (authLoading || loading) {
     return (

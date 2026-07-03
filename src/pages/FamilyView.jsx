@@ -68,10 +68,10 @@ export default function FamilyView() {
       setIndividual(individualData);
 
       const { data: sessionsData, error: sessionsError } = await supabase
-        .from('sessions')
-        .select('session_date, scenario_used, went_well, goal_moment')
+        .from('sessions_family_view')
+        .select('session_date, scenario_used, family_summary')
         .eq('individual_id', individualId)
-        .order('session_date', { ascending: true })
+        .order('session_date', { ascending: false })
         .limit(10);
 
       if (!isMounted) return;
@@ -79,7 +79,7 @@ export default function FamilyView() {
       if (sessionsError) {
         setError('Could not load session history.');
       } else {
-        setSessions(sessionsData || []);
+        setSessions((sessionsData || []).slice().reverse());
       }
 
       setLoading(false);
@@ -147,18 +147,10 @@ export default function FamilyView() {
                     {session.scenario_used}
                   </div>
                 )}
-                {session.went_well && (
-                  <div style={styles.sessionField}>
-                    <span style={styles.fieldLabel}>What went well: </span>
-                    {session.went_well}
-                  </div>
-                )}
-                {session.goal_moment && (
-                  <div style={styles.sessionField}>
-                    <span style={styles.fieldLabel}>Goal moment: </span>
-                    {session.goal_moment}
-                  </div>
-                )}
+                <div style={styles.sessionField}>
+                  {session.family_summary ||
+                    'A summary for this session will be added soon.'}
+                </div>
               </div>
             ))}
           </div>

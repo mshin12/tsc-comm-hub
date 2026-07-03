@@ -15,7 +15,7 @@ const TIER_COLORS = {
 export default function Session() {
   const { individualId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
  
   const [individual, setIndividual] = useState(null);
   const [prompts, setPrompts] = useState([]);
@@ -34,14 +34,25 @@ export default function Session() {
   const [sessionEnded, setSessionEnded] = useState(false);
  
   // Data to hand off to the session log form once the session completes
+  const [sessionId, setSessionId] = useState(null);
   const [scenarioUsed, setScenarioUsed] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
  
   const messageListRef = useRef(null);
   const sessionStartTimeRef = useRef(null);
  
   // Fetch the individual's profile, then the matching prompts for their tier
   useEffect(() => {
-    if (!individualId) return;
+    if (authLoading) return;
+    if (!individualId) {
+      setLoading(false);
+      return;
+    }
+    if (!user) {
+      setError('You must be signed in to view this page.');
+      setLoading(false);
+      return;
+    }
  
     let isMounted = true;
  
@@ -49,11 +60,15 @@ export default function Session() {
       setLoading(true);
       setError('');
  
-      const { data: individualData, error: individualError } = await supabase
+      let individualQuery = supabase
         .from('individuals')
         .select('*')
-        .eq('id', individualId)
-        .single();
+        .eq('id', individualId);
+      if (role !== 'admin') {
+        individualQuery = individualQuery.contains('assigned_staff', [user.id]);
+      }
+
+      const { data: individualData, error: individualError } = await individualQuery.single();
  
       if (!isMounted) return;
  
@@ -88,7 +103,7 @@ export default function Session() {
     return () => {
       isMounted = false;
     };
-  }, [individualId]);
+  }, [authLoading, user, role, individualId]);
  
   // Auto-scroll to the latest message whenever the conversation updates
   useEffect(() => {
@@ -97,7 +112,7 @@ export default function Session() {
     }
   }, [messages]);
  
-  const handleStartSession = () => {
+  const handleStartSession = async () => {
     const selectedPrompt = prompts.find(
       (prompt) => String(prompt.id) === String(selectedPromptId)
     );
@@ -113,7 +128,31 @@ export default function Session() {
     }
  
     setError('');
-    sessionStartTimeRef.current = Date.now();
+    setIsStarting(true);
+ 
+    const startTime = Date.now();
+ 
+    const { data: sessionRow, error: insertError } = await supabase
+      .from('sessions')
+      .insert({
+        individual_id: individualId,
+        staff_id: user.id,
+        session_date: new Date(startTime).toISOString(),
+        tier_used: individual.communication_tier,
+        scenario_used: selectedPrompt.scenario_name,
+      })
+      .select()
+      .single();
+ 
+    setIsStarting(false);
+ 
+    if (insertError || !sessionRow) {
+      setError('Could not start the session. Please try again.');
+      return;
+    }
+ 
+    sessionStartTimeRef.current = startTime;
+    setSessionId(sessionRow.id);
     setScenarioUsed(selectedPrompt.scenario_name);
     setAssembledPrompt(assemblePrompt(selectedPrompt.system_prompt, individual));
     setSessionActive(true);
@@ -134,9 +173,18 @@ export default function Session() {
     setIsSending(true);
  
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token
+            ? { Authorization: 'Bearer ' + session.access_token }
+            : {}),
+        },
         body: JSON.stringify({
           messages: updatedMessages,
           systemPrompt: assembledPrompt,
@@ -174,14 +222,10 @@ export default function Session() {
       ? Math.round((Date.now() - sessionStartTimeRef.current) / 60000)
       : null;
  
-    navigate('/session/' + individualId + '/log', {
+    navigate('/session/' + sessionId + '/log', {
       state: {
         individual_id: individualId,
-        staff_id: user ? user.id : null,
         scenario_used: scenarioUsed,
-        session_date: sessionStartTimeRef.current
-          ? new Date(sessionStartTimeRef.current).toISOString()
-          : new Date().toISOString(),
         session_length: elapsedMinutes,
         messages,
       },
@@ -244,9 +288,9 @@ export default function Session() {
             type="button"
             style={styles.primaryButton}
             onClick={handleStartSession}
-            disabled={!selectedPromptId}
+            disabled={!selectedPromptId || isStarting}
           >
-            Start Session
+            {isStarting ? 'Starting...' : 'Start Session'}
           </button>
         </div>
       )}

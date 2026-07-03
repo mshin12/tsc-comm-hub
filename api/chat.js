@@ -1,13 +1,32 @@
 import Anthropic from '@anthropic-ai/sdk';
- 
+import { createClient } from '@supabase/supabase-js';
+
 const anthropic = new Anthropic();
- 
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_ANON_KEY
+);
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: 'Method not allowed' });
   }
- 
+
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Missing authorization token.' });
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+
+  if (authError || !authData?.user) {
+    return res.status(401).json({ error: 'Invalid or expired session.' });
+  }
+
   const { messages, systemPrompt } = req.body || {};
  
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -20,7 +39,7 @@ export default async function handler(req, res) {
  
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       system: systemPrompt,
       messages,

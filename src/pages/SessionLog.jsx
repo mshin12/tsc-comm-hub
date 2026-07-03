@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
 export default function SessionLog() {
+  const { sessionId } = useParams();
   const { state } = useLocation();
   const navigate = useNavigate();
 
   const {
     individual_id,
-    staff_id,
     scenario_used,
-    session_date,
     session_length: initialLength,
   } = state || {};
 
@@ -25,11 +24,11 @@ export default function SessionLog() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  if (!individual_id) {
+  if (!sessionId) {
     return (
       <div style={styles.page}>
         <div style={styles.errorBanner}>
-          No session data found. Please start a session first.
+          No session found. Please start a session first.
         </div>
       </div>
     );
@@ -39,27 +38,29 @@ export default function SessionLog() {
     setError('');
     setSubmitting(true);
 
-    const { error: insertError } = await supabase.from('sessions').insert({
-      individual_id,
-      staff_id,
-      scenario_used,
-      session_date,
-      went_well: wentWell.trim() || null,
-      challenge_noted: challengeNoted.trim() || null,
-      goal_moment: goalMoment.trim() || null,
-      staff_notes: staffNotes.trim() || null,
-      session_length: sessionLength !== '' ? parseInt(sessionLength, 10) : null,
-    });
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('sessions')
+      .update({
+        went_well: wentWell.trim() || null,
+        challenge_noted: challengeNoted.trim() || null,
+        goal_moment: goalMoment.trim() || null,
+        staff_notes: staffNotes.trim() || null,
+        session_length: sessionLength !== '' ? parseInt(sessionLength, 10) : null,
+      })
+      .eq('id', sessionId)
+      .select('individual_id')
+      .single();
 
     setSubmitting(false);
 
-    if (insertError) {
-      setError(insertError.message || 'Could not save the session log. Please try again.');
+    if (updateError) {
+      setError(updateError.message || 'Could not save the session log. Please try again.');
       return;
     }
 
     setSuccess(true);
-    setTimeout(() => navigate('/individual/' + individual_id), 1500);
+    const redirectId = updatedRow?.individual_id || individual_id;
+    setTimeout(() => navigate('/individual/' + redirectId), 1500);
   };
 
   const disabled = submitting || success;
