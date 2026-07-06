@@ -1,15 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
- 
+
 export default function Login() {
   const navigate = useNavigate();
- 
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
- 
+
+  // Invite and password-reset emails link back to the site root with an
+  // auth token in the URL (unless a custom redirectTo has been configured
+  // in Supabase). That token logs the user in automatically — if we let
+  // this fall through to the normal login form, they have no password to
+  // enter yet and every attempt fails. Catch it here and send them to set
+  // one instead.
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    if (hash.includes('type=invite') || hash.includes('type=recovery')) {
+      navigate('/set-password', { replace: true });
+      return;
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/set-password', { replace: true });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
   const handleLogin = async () => {
     setError('');
  

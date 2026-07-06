@@ -6,6 +6,7 @@ import {
 } from 'react-router-dom';
 
 import Login from './pages/Login';
+import SetPassword from './pages/SetPassword';
 import StaffDashboard from './pages/StaffDashboard';
 import IndividualProfile from './pages/IndividualProfile';
 import AllSessions from './pages/AllSessions';
@@ -20,8 +21,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public route */}
+        {/* Public routes */}
         <Route path="/" element={<Login />} />
+        <Route path="/set-password" element={<SetPassword />} />
 
         {/* Protected routes */}
         <Route
