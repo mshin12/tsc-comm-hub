@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { assemblePrompt } from '../lib/assemblePrompt';
 import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
+import { logAction } from '../lib/auditLog';
  
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -163,6 +164,12 @@ export default function Session() {
     setScenarioUsed(selectedPrompt.scenario_name);
     setAssembledPrompt(assemblePrompt(selectedPrompt.system_prompt, individual));
     setSessionActive(true);
+
+    logAction('session_started', {
+      tableName: 'sessions',
+      recordId: sessionRow.id,
+      metadata: { individual_id: individualId, scenario_used: selectedPrompt.scenario_name },
+    });
   };
  
   const sendConversation = async (updatedMessages, isEndSession) => {

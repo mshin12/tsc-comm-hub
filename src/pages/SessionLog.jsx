@@ -1,19 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { logAction } from '../lib/auditLog';
 
 export default function SessionLog() {
   const { sessionId } = useParams();
   const { state } = useLocation();
   const navigate = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
 
   const {
-    individual_id,
-    scenario_used,
-    session_length: initialLength,
+    individual_id: stateIndividualId,
+    scenario_used: stateScenarioUsed,
+    session_length: stateInitialLength,
   } = state || {};
+
+  const [session, setSession] = useState(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const [wentWell, setWentWell] = useState('');
   const [challengeNoted, setChallengeNoted] = useState('');
@@ -21,11 +26,65 @@ export default function SessionLog() {
   const [staffNotes, setStaffNotes] = useState('');
   const [familySummary, setFamilySummary] = useState('');
   const [sessionLength, setSessionLength] = useState(
-    initialLength != null ? String(initialLength) : ''
+    stateInitialLength != null ? String(stateInitialLength) : ''
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Load the session directly from the DB so this page works whether it was
+  // reached via the normal "Complete Session" handoff (with router state) or
+  // via a bare link/refresh (e.g. the "Finish Log" shortcut, or a reload).
+  // This also prefills any previously-saved notes instead of risking staff
+  // overwriting existing content with blank fields.
+  useEffect(() => {
+    if (authLoading || !sessionId) return;
+
+    let isMounted = true;
+
+    const fetchSession = async () => {
+      setLoadingSession(true);
+      setLoadError('');
+
+      const { data, error: fetchError } = await supabase
+        .from('sessions')
+        .select(
+          'individual_id, scenario_used, session_length, transcript, went_well, challenge_noted, goal_moment, staff_notes, family_summary'
+        )
+        .eq('id', sessionId)
+        .single();
+
+      if (!isMounted) return;
+
+      if (fetchError || !data) {
+        setLoadError('Could not load this session. It may not exist, or you may not have permission to view it.');
+        setLoadingSession(false);
+        return;
+      }
+
+      setSession(data);
+      setWentWell(data.went_well || '');
+      setChallengeNoted(data.challenge_noted || '');
+      setGoalMoment(data.goal_moment || '');
+      setStaffNotes(data.staff_notes || '');
+      setFamilySummary(data.family_summary || '');
+      setSessionLength(
+        data.session_length != null
+          ? String(data.session_length)
+          : stateInitialLength != null
+          ? String(stateInitialLength)
+          : ''
+      );
+      setLoadingSession(false);
+    };
+
+    fetchSession();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, sessionId]);
 
   if (!sessionId) {
     return (
@@ -36,6 +95,9 @@ export default function SessionLog() {
       </div>
     );
   }
+
+  const scenarioUsed = session?.scenario_used || stateScenarioUsed;
+  const transcript = session?.transcript;
 
   const handleSubmit = async () => {
     setError('');
@@ -88,21 +150,58 @@ export default function SessionLog() {
     }
 
     setSuccess(true);
-    const redirectId = updatedRow?.individual_id || individual_id;
+    const redirectId = updatedRow?.individual_id || stateIndividualId;
+
+    logAction('session_logged', {
+      tableName: 'sessions',
+      recordId: sessionId,
+      metadata: { individual_id: redirectId },
+    });
+
     setTimeout(() => navigate('/individual/' + redirectId), 1500);
   };
 
   const disabled = submitting || success;
 
+  if (loadingSession) {
+    return (
+      <div style={styles.centered}>
+        <div style={styles.spinner} />
+        <style>{`
+          @keyframes session-log-spin { to { transform: rotate(360deg); } }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.page}>
       <h1 style={styles.heading}>Session Log</h1>
-      {scenario_used && (
-        <p style={styles.subheading}>Scenario: {scenario_used}</p>
+      {scenarioUsed && (
+        <p style={styles.subheading}>Scenario: {scenarioUsed}</p>
       )}
 
+      {loadError && <div style={styles.errorBanner}>{loadError}</div>}
       {error && <div style={styles.errorBanner}>{error}</div>}
       {success && <div style={styles.successBanner}>Session saved! Redirecting...</div>}
+
+      {transcript && transcript.length > 0 && (
+        <details style={styles.transcriptPanel}>
+          <summary style={styles.transcriptSummary}>
+            View session transcript ({transcript.length} messages)
+          </summary>
+          <div style={styles.transcriptList}>
+            {transcript.map((message, index) => (
+              <div key={index} style={styles.transcriptRow}>
+                <span style={styles.transcriptRole}>
+                  {message.role === 'user' ? 'Individual: ' : 'Assistant: '}
+                </span>
+                {message.content}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       <div style={styles.field}>
         <label style={styles.label} htmlFor="went-well">
@@ -229,6 +328,51 @@ const styles = {
     fontSize: 14,
     color: '#6b7280',
     margin: '0 0 24px 0',
+  },
+  centered: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '60vh',
+  },
+  spinner: {
+    width: 40,
+    height: 40,
+    border: '4px solid #e0e0e0',
+    borderTopColor: '#2563eb',
+    borderRadius: '50%',
+    animation: 'session-log-spin 0.8s linear infinite',
+  },
+  transcriptPanel: {
+    margin: '0 0 24px 0',
+    padding: '10px 14px',
+    backgroundColor: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: 4,
+  },
+  transcriptSummary: {
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#374151',
+  },
+  transcriptList: {
+    marginTop: 12,
+    maxHeight: 280,
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  transcriptRow: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 1.5,
+    whiteSpace: 'pre-wrap',
+  },
+  transcriptRole: {
+    fontWeight: 600,
+    color: '#111827',
   },
   errorBanner: {
     margin: '16px 0',

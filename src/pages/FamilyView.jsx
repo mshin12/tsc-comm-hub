@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { logAction } from '../lib/auditLog';
 
 function formatDate(dateString) {
   if (!dateString) return '';
@@ -50,6 +51,11 @@ export default function FamilyView() {
       }
 
       setIndividual(individualData);
+
+      logAction('family_view_accessed', {
+        tableName: 'individuals',
+        recordId: individualData.id,
+      });
 
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions_family_view')

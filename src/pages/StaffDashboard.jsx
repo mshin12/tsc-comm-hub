@@ -15,11 +15,28 @@ function truncate(text, maxLength) {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength).trim() + '...';
 }
+
+const OVERDUE_DAYS = 14;
+
+function daysSince(dateString) {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return null;
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function formatLastSession(days) {
+  if (days === null) return 'No sessions yet';
+  if (days <= 0) return 'Last session: today';
+  if (days === 1) return 'Last session: yesterday';
+  return 'Last session: ' + days + ' days ago';
+}
  
 export default function StaffDashboard() {
   const { user, role, loading: authLoading } = useAuth();
  
   const [individuals, setIndividuals] = useState([]);
+  const [lastSessionByIndividual, setLastSessionByIndividual] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
  
@@ -49,10 +66,35 @@ export default function StaffDashboard() {
       if (fetchError) {
         setError('Could not load your individuals. Please try again.');
         setIndividuals([]);
-      } else {
-        setIndividuals(data || []);
+        setLoading(false);
+        return;
       }
- 
+
+      const loadedIndividuals = data || [];
+      setIndividuals(loadedIndividuals);
+
+      if (loadedIndividuals.length > 0) {
+        const ids = loadedIndividuals.map((individual) => individual.id);
+        const { data: sessionsData, error: sessionsError } = await supabase
+          .from('sessions')
+          .select('individual_id, session_date')
+          .in('individual_id', ids)
+          .order('session_date', { ascending: false });
+
+        if (isMounted && !sessionsError) {
+          const map = {};
+          for (const session of sessionsData || []) {
+            // Rows arrive newest-first, so the first one seen per individual is the most recent.
+            if (!(session.individual_id in map)) {
+              map[session.individual_id] = session.session_date;
+            }
+          }
+          setLastSessionByIndividual(map);
+        }
+      } else {
+        setLastSessionByIndividual({});
+      }
+
       setLoading(false);
     };
  
@@ -94,6 +136,8 @@ export default function StaffDashboard() {
                 backgroundColor: '#e5e7eb',
                 color: '#374151',
               };
+            const days = daysSince(lastSessionByIndividual[individual.id]);
+            const isOverdue = days === null || days > OVERDUE_DAYS;
 
             return (
               <Link
@@ -118,6 +162,14 @@ export default function StaffDashboard() {
                   <p style={styles.goals}>
                     {truncate(individual.goals, 100)}
                   </p>
+                  <div
+                    style={{
+                      ...styles.lastSession,
+                      ...(isOverdue ? styles.lastSessionOverdue : {}),
+                    }}
+                  >
+                    {formatLastSession(days)}
+                  </div>
                 </div>
               </Link>
             );
@@ -211,5 +263,14 @@ const styles = {
     color: '#4b5563',
     margin: 0,
     lineHeight: 1.4,
+  },
+  lastSession: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#6b7280',
+  },
+  lastSessionOverdue: {
+    color: '#a94442',
   },
 };
