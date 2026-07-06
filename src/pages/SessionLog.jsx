@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../hooks/useAuth';
 
 export default function SessionLog() {
   const { sessionId } = useParams();
   const { state } = useLocation();
   const navigate = useNavigate();
+  const { user, role } = useAuth();
 
   const {
     individual_id,
@@ -17,6 +19,7 @@ export default function SessionLog() {
   const [challengeNoted, setChallengeNoted] = useState('');
   const [goalMoment, setGoalMoment] = useState('');
   const [staffNotes, setStaffNotes] = useState('');
+  const [familySummary, setFamilySummary] = useState('');
   const [sessionLength, setSessionLength] = useState(
     initialLength != null ? String(initialLength) : ''
   );
@@ -37,7 +40,7 @@ export default function SessionLog() {
   const handleSubmit = async () => {
     setError('');
 
-    const hasContent = [wentWell, challengeNoted, goalMoment, staffNotes].some(
+    const hasContent = [wentWell, challengeNoted, goalMoment, staffNotes, familySummary].some(
       (value) => value.trim() !== ''
     );
 
@@ -46,25 +49,41 @@ export default function SessionLog() {
       return;
     }
 
+    if (!user) {
+      setError('You must be signed in to save a session log.');
+      return;
+    }
+
     setSubmitting(true);
 
-    const { data: updatedRow, error: updateError } = await supabase
+    let updateQuery = supabase
       .from('sessions')
       .update({
         went_well: wentWell.trim() || null,
         challenge_noted: challengeNoted.trim() || null,
         goal_moment: goalMoment.trim() || null,
         staff_notes: staffNotes.trim() || null,
+        family_summary: familySummary.trim() || null,
         session_length: sessionLength !== '' ? parseInt(sessionLength, 10) : null,
       })
-      .eq('id', sessionId)
+      .eq('id', sessionId);
+
+    if (role !== 'admin') {
+      updateQuery = updateQuery.eq('staff_id', user.id);
+    }
+
+    const { data: updatedRow, error: updateError } = await updateQuery
       .select('individual_id')
       .single();
 
     setSubmitting(false);
 
     if (updateError) {
-      setError(updateError.message || 'Could not save the session log. Please try again.');
+      setError(
+        updateError.code === 'PGRST116'
+          ? 'This session log could not be found, or you do not have permission to edit it.'
+          : updateError.message || 'Could not save the session log. Please try again.'
+      );
       return;
     }
 
@@ -146,6 +165,24 @@ export default function SessionLog() {
       </div>
 
       <div style={styles.field}>
+        <label style={styles.label} htmlFor="family-summary">
+          Family-facing summary
+        </label>
+        <p style={styles.hint}>
+          Shown directly to family members in their view — keep it warm, general, and free of clinical language.
+        </p>
+        <textarea
+          id="family-summary"
+          value={familySummary}
+          onChange={(e) => setFamilySummary(e.target.value)}
+          style={styles.textarea}
+          rows={3}
+          disabled={disabled}
+          placeholder="e.g. Today we practiced ordering at a restaurant and had a great time!"
+        />
+      </div>
+
+      <div style={styles.field}>
         <label style={styles.label} htmlFor="session-length">
           Session length (minutes)
         </label>
@@ -211,6 +248,11 @@ const styles = {
   },
   field: {
     marginBottom: 20,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#6b7280',
+    margin: '0 0 6px 0',
   },
   label: {
     display: 'block',

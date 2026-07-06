@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { parseTierNumber } from '../lib/tier';
  
 const TIER_COLORS = {
   1: { backgroundColor: '#dbeafe', color: '#1e40af' }, // blue
@@ -16,7 +17,7 @@ function truncate(text, maxLength) {
 }
  
 export default function StaffDashboard() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
  
   const [individuals, setIndividuals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,11 +37,12 @@ export default function StaffDashboard() {
       setLoading(true);
       setError('');
  
-      const { data, error: fetchError } = await supabase
-        .from('individuals')
-        .select('*')
-        .contains('assigned_staff', [user.id])
-        .eq('is_active', true);
+      let query = supabase.from('individuals').select('*').eq('is_active', true);
+      if (role !== 'admin') {
+        query = query.contains('assigned_staff', [user.id]);
+      }
+
+      const { data, error: fetchError } = await query;
  
       if (!isMounted) return;
  
@@ -59,7 +61,7 @@ export default function StaffDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, role]);
  
   if (authLoading || loading) {
     return (
@@ -75,19 +77,24 @@ export default function StaffDashboard() {
  
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>My Individuals</h1>
- 
+      <h1 style={styles.heading}>
+        {role === 'admin' ? 'All Individuals' : 'My Individuals'}
+      </h1>
+
       {individuals.length === 0 ? (
-        <div style={styles.emptyState}>No individuals assigned yet</div>
+        <div style={styles.emptyState}>
+          {role === 'admin' ? 'No active individuals yet' : 'No individuals assigned yet'}
+        </div>
       ) : (
         <div style={styles.grid}>
           {individuals.map((individual) => {
+            const tierNumber = parseTierNumber(individual.communication_tier);
             const tierStyle =
-              TIER_COLORS[individual.communication_tier] || {
+              TIER_COLORS[tierNumber] || {
                 backgroundColor: '#e5e7eb',
                 color: '#374151',
               };
- 
+
             return (
               <Link
                 key={individual.id}
@@ -105,7 +112,7 @@ export default function StaffDashboard() {
                         ...tierStyle,
                       }}
                     >
-                      {'Tier ' + individual.communication_tier}
+                      {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
                     </span>
                   </div>
                   <p style={styles.goals}>

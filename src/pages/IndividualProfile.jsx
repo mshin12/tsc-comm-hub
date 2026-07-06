@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { parseTierNumber } from '../lib/tier';
  
 const TIER_COLORS = {
   1: { backgroundColor: '#dbeafe', color: '#1e40af' },
@@ -9,6 +10,15 @@ const TIER_COLORS = {
   3: { backgroundColor: '#dcfce7', color: '#166534' },
 };
  
+function isUnfinished(session) {
+  return (
+    !session.went_well &&
+    !session.challenge_noted &&
+    !session.goal_moment &&
+    !session.staff_notes
+  );
+}
+
 function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -103,19 +113,20 @@ export default function IndividualProfile() {
     );
   }
  
+  const tierNumber = parseTierNumber(individual.communication_tier);
   const tierStyle =
-    TIER_COLORS[individual.communication_tier] || {
+    TIER_COLORS[tierNumber] || {
       backgroundColor: '#e5e7eb',
       color: '#374151',
     };
- 
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <div>
           <h1 style={styles.name}>{individual.full_name}</h1>
           <span style={{ ...styles.badge, ...tierStyle }}>
-            {'Tier ' + individual.communication_tier}
+            {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
           </span>
         </div>
         <div style={styles.headerButtons}>
@@ -185,9 +196,19 @@ export default function IndividualProfile() {
                 <div style={styles.sessionField}>
                   <strong>Scenario:</strong> {session.scenario_used || '—'}
                 </div>
-                <div style={styles.sessionField}>
-                  <strong>Went well:</strong> {session.went_well || '—'}
-                </div>
+                {isUnfinished(session) ? (
+                  <button
+                    type="button"
+                    style={styles.finishLogButton}
+                    onClick={() => navigate('/session/' + session.id + '/log')}
+                  >
+                    Finish Log →
+                  </button>
+                ) : (
+                  <div style={styles.sessionField}>
+                    <strong>Went well:</strong> {session.went_well || '—'}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -314,5 +335,16 @@ const styles = {
     fontSize: 14,
     color: '#374151',
     marginTop: 2,
+  },
+  finishLogButton: {
+    marginTop: 6,
+    padding: '4px 10px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#a94442',
+    backgroundColor: '#fff',
+    border: '1px solid #ebccd1',
+    borderRadius: 4,
+    cursor: 'pointer',
   },
 };

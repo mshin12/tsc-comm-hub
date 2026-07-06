@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { assemblePrompt } from '../lib/assemblePrompt';
 import { useAuth } from '../hooks/useAuth';
+import { parseTierNumber } from '../lib/tier';
  
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -84,11 +85,12 @@ export default function Session() {
       }
  
       setIndividual(individualData);
- 
+
+      const tierNumber = parseTierNumber(individualData.communication_tier);
       const { data: promptsData, error: promptsError } = await supabase
         .from('prompts')
         .select('*')
-        .eq('tier', individualData.communication_tier)
+        .eq('tier', tierNumber)
         .eq('is_active', true);
  
       if (!isMounted) return;
@@ -143,7 +145,7 @@ export default function Session() {
         individual_id: individualId,
         staff_id: user.id,
         session_date: new Date(startTime).toISOString(),
-        tier_used: individual.communication_tier,
+        tier_used: parseTierNumber(individual.communication_tier),
         scenario_used: selectedPrompt.scenario_name,
       })
       .select()
@@ -181,7 +183,7 @@ export default function Session() {
             : {}),
         },
         body: JSON.stringify({
-          messages: updatedMessages,
+          messages: updatedMessages.map(({ role, content }) => ({ role, content })),
           systemPrompt: assembledPrompt,
         }),
       });
@@ -294,18 +296,19 @@ export default function Session() {
     );
   }
  
+  const tierNumber = parseTierNumber(individual.communication_tier);
   const tierStyle =
-    TIER_COLORS[individual.communication_tier] || {
+    TIER_COLORS[tierNumber] || {
       backgroundColor: '#e5e7eb',
       color: '#374151',
     };
- 
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <h1 style={styles.name}>{individual.full_name}</h1>
         <span style={{ ...styles.badge, ...tierStyle }}>
-          {'Tier ' + individual.communication_tier}
+          {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
         </span>
       </div>
  
