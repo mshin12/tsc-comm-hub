@@ -12,13 +12,29 @@ export default function Login() {
 
   // Invite and password-reset emails link back to the site root with an
   // auth token in the URL (unless a custom redirectTo has been configured
-  // in Supabase). That token logs the user in automatically — if we let
-  // this fall through to the normal login form, they have no password to
-  // enter yet and every attempt fails. Catch it here and send them to set
-  // one instead.
+  // in Supabase). Depending on the project's auth flow settings that shows
+  // up as a hash fragment (#access_token=...&type=invite) or a query string
+  // (?code=...). Either way, if we let it fall through to the normal login
+  // form, the user has no password to enter yet and every attempt fails.
+  // Catch every variant here — including an expired/already-used link,
+  // which Supabase reports as an error in the same hash/query — and either
+  // hand off to /set-password or surface a clear message instead of a
+  // silent, confusing "wrong password".
   useEffect(() => {
-    const hash = window.location.hash || '';
-    if (hash.includes('type=invite') || hash.includes('type=recovery')) {
+    const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    const queryParams = new URLSearchParams(window.location.search || '');
+
+    const errorDescription =
+      hashParams.get('error_description') || queryParams.get('error_description');
+    if (errorDescription) {
+      setError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+      return;
+    }
+
+    const type = hashParams.get('type') || queryParams.get('type');
+    const isAuthCallback = type === 'invite' || type === 'recovery' || queryParams.has('code');
+
+    if (isAuthCallback) {
       navigate('/set-password', { replace: true });
       return;
     }
