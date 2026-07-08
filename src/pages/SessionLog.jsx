@@ -97,7 +97,7 @@ export default function SessionLog() {
   }
 
   const scenarioUsed = session?.scenario_used || stateScenarioUsed;
-  const transcript = session?.transcript;
+  const transcript = (session?.transcript || []).filter((message) => !message.hidden);
 
   const handleSubmit = async () => {
     setError('');

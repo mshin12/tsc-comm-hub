@@ -11,6 +11,17 @@ const END_SESSION_KEYWORD = 'END SESSION';
 function isEndSessionText(text) {
   return text.trim().replace(/[.!?]+$/, '').toUpperCase() === END_SESSION_KEYWORD;
 }
+
+// Sent automatically the moment a session starts, so the AI opens the scene
+// in character instead of the staff/individual having to know a magic
+// phrase. It's flagged `hidden` so it never renders as a chat bubble, but it
+// still counts as a real turn for the API (which requires the conversation
+// to start with a "user" message) and is still saved in the transcript.
+const KICKOFF_MESSAGE = {
+  role: 'user',
+  content: 'The session is starting now. Begin the activity following your instructions.',
+  hidden: true,
+};
  
 const TIER_COLORS = {
   1: { backgroundColor: '#dbeafe', color: '#1e40af' },
@@ -159,10 +170,16 @@ export default function Session() {
       return;
     }
  
+    const builtPrompt = assemblePrompt(
+      selectedPrompt.system_prompt,
+      individual,
+      selectedPrompt.scenario_name
+    );
+
     sessionStartTimeRef.current = startTime;
     setSessionId(sessionRow.id);
     setScenarioUsed(selectedPrompt.scenario_name);
-    setAssembledPrompt(assemblePrompt(selectedPrompt.system_prompt, individual));
+    setAssembledPrompt(builtPrompt);
     setSessionActive(true);
 
     logAction('session_started', {
@@ -170,9 +187,24 @@ export default function Session() {
       recordId: sessionRow.id,
       metadata: { individual_id: individualId, scenario_used: selectedPrompt.scenario_name },
     });
+
+    // setAssembledPrompt/setSessionId above won't be visible to this closure
+    // until the next render, so pass the freshly-built values through
+    // explicitly rather than letting sendConversation read stale state.
+    sendConversation([KICKOFF_MESSAGE], false, {
+      systemPrompt: builtPrompt,
+      sessionId: sessionRow.id,
+    });
   };
  
-  const sendConversation = async (updatedMessages, isEndSession) => {
+  const sendConversation = async (updatedMessages, isEndSession, overrides = {}) => {
+    // Callers that just changed assembledPrompt/sessionId in the same tick
+    // (i.e. handleStartSession) can't rely on reading them back from state
+    // yet, since React hasn't re-rendered — pass the fresh values through
+    // explicitly instead.
+    const activeSystemPrompt = overrides.systemPrompt ?? assembledPrompt;
+    const activeSessionId = overrides.sessionId ?? sessionId;
+
     setChatError('');
     setIsSending(true);
 
@@ -191,7 +223,7 @@ export default function Session() {
         },
         body: JSON.stringify({
           messages: updatedMessages.map(({ role, content }) => ({ role, content })),
-          systemPrompt: assembledPrompt,
+          systemPrompt: activeSystemPrompt,
         }),
       });
 
@@ -217,11 +249,11 @@ export default function Session() {
       setMessages(finalMessages);
       setLastFailedTurn(null);
 
-      if (sessionId) {
+      if (activeSessionId) {
         const { error: transcriptError } = await supabase
           .from('sessions')
           .update({ transcript: finalMessages })
-          .eq('id', sessionId);
+          .eq('id', activeSessionId);
         if (transcriptError) {
           console.error('Could not save transcript:', transcriptError);
         }
@@ -232,7 +264,7 @@ export default function Session() {
       }
     } catch (err) {
       setChatError(err.message || 'Something went wrong. Please try again.');
-      setLastFailedTurn({ messages: updatedMessages, isEndSession });
+      setLastFailedTurn({ messages: updatedMessages, isEndSession, overrides });
     } finally {
       setIsSending(false);
     }
@@ -263,7 +295,7 @@ export default function Session() {
 
   const handleRetry = () => {
     if (!lastFailedTurn) return;
-    sendConversation(lastFailedTurn.messages, lastFailedTurn.isEndSession);
+    sendConversation(lastFailedTurn.messages, lastFailedTurn.isEndSession, lastFailedTurn.overrides);
   };
  
   const handleKeyDown = (e) => {
@@ -364,12 +396,12 @@ export default function Session() {
       {sessionActive && (
         <div style={styles.chatPanel}>
           <div style={styles.messageList} ref={messageListRef}>
-            {messages.length === 0 && (
+            {messages.filter((m) => !m.hidden).length === 0 && !isSending && (
               <div style={styles.emptyChat}>
-                Send a message to begin the session.
+                Waiting for the session to begin...
               </div>
             )}
-            {messages.map((message, index) => (
+            {messages.filter((m) => !m.hidden).map((message, index) => (
               <div
                 key={index}
                 style={{
