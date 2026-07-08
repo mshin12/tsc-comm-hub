@@ -59,7 +59,7 @@ export default function FamilyView() {
 
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions_family_view')
-        .select('session_date, scenario_used, family_summary')
+        .select('id, session_date, scenario_used, family_summary')
         .eq('individual_id', individualData.id)
         .order('session_date', { ascending: false })
         .limit(10);
@@ -128,8 +128,8 @@ export default function FamilyView() {
           )
         ) : (
           <div style={styles.sessionList}>
-            {sessions.map((session, index) => (
-              <div key={index} style={styles.sessionCard}>
+            {sessions.map((session) => (
+              <div key={session.id} style={styles.sessionCard}>
                 <div style={styles.sessionDate}>
                   {formatDate(session.session_date)}
                 </div>

@@ -129,19 +129,18 @@ export default function AllSessions() {
               <div style={styles.sessionField}>
                 <strong>Scenario:</strong> {session.scenario_used || '—'}
               </div>
-              {isUnfinished(session) ? (
-                <button
-                  type="button"
-                  style={styles.finishLogButton}
-                  onClick={() => navigate('/session/' + session.id + '/log')}
-                >
-                  Finish Log →
-                </button>
-              ) : (
+              {!isUnfinished(session) && (
                 <div style={styles.sessionField}>
                   <strong>Went well:</strong> {session.went_well || '—'}
                 </div>
               )}
+              <button
+                type="button"
+                style={isUnfinished(session) ? styles.finishLogButton : styles.viewLogButton}
+                onClick={() => navigate('/session/' + session.id + '/log')}
+              >
+                {isUnfinished(session) ? 'Finish Log →' : 'View / Edit Log →'}
+              </button>
             </li>
           ))}
         </ul>
@@ -239,6 +238,17 @@ const styles = {
     color: '#a94442',
     backgroundColor: '#fff',
     border: '1px solid #ebccd1',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
+  viewLogButton: {
+    marginTop: 6,
+    padding: '4px 10px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#2563eb',
+    backgroundColor: '#fff',
+    border: '1px solid #2563eb',
     borderRadius: 4,
     cursor: 'pointer',
   },
