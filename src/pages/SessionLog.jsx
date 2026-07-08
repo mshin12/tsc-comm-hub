@@ -17,8 +17,11 @@ export default function SessionLog() {
   } = state || {};
 
   const [session, setSession] = useState(null);
+  const [individual, setIndividual] = useState(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [generateError, setGenerateError] = useState('');
 
   const [wentWell, setWentWell] = useState('');
   const [challengeNoted, setChallengeNoted] = useState('');
@@ -76,6 +79,18 @@ export default function SessionLog() {
           : ''
       );
       setLoadingSession(false);
+
+      // Best-effort context for the "Generate summary" fallback below —
+      // if this fails (e.g. RLS on an individual this staff isn't assigned
+      // to), the generator still works, just without personalization.
+      if (data.individual_id) {
+        const { data: individualData } = await supabase
+          .from('individuals')
+          .select('full_name, goals')
+          .eq('id', data.individual_id)
+          .maybeSingle();
+        if (isMounted && individualData) setIndividual(individualData);
+      }
     };
 
     fetchSession();
@@ -99,6 +114,52 @@ export default function SessionLog() {
   const scenarioUsed = session?.scenario_used || stateScenarioUsed;
   const transcript = (session?.transcript || []).filter((message) => !message.hidden);
   const backTargetId = session?.individual_id || stateIndividualId;
+
+  // Normally the AI analysis runs automatically right after END SESSION, but
+  // this covers the fallback cases: the request failed, or this log belongs
+  // to a session that ended before that feature existed.
+  const handleGenerateSummary = async () => {
+    if (transcript.length === 0) return;
+
+    setGeneratingSummary(true);
+    setGenerateError('');
+
+    try {
+      const {
+        data: { session: authSession },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/debrief', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authSession?.access_token
+            ? { Authorization: 'Bearer ' + authSession.access_token }
+            : {}),
+        },
+        body: JSON.stringify({
+          transcript: transcript.map(({ role, content }) => ({ role, content })),
+          individual: individual || {},
+        }),
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error || 'Could not generate a session summary.');
+      }
+
+      setWentWell(data.went_well || '');
+      setChallengeNoted(data.challenge_noted || '');
+      setGoalMoment(data.goal_moment || '');
+      setFamilySummary(data.family_summary || '');
+    } catch (err) {
+      setGenerateError(err.message || 'Could not generate a session summary.');
+    } finally {
+      setGeneratingSummary(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError('');
@@ -200,6 +261,20 @@ export default function SessionLog() {
         for accuracy and correct anything that's off — then add your own observations under
         Staff Notes.
       </p>
+
+      {transcript.length > 0 && (
+        <div style={styles.generateRow}>
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={handleGenerateSummary}
+            disabled={generatingSummary}
+          >
+            {generatingSummary ? 'Generating…' : 'Generate summary from transcript'}
+          </button>
+          {generateError && <span style={styles.generateError}>{generateError}</span>}
+        </div>
+      )}
 
       {transcript && transcript.length > 0 && (
         <details style={styles.transcriptPanel}>
@@ -438,6 +513,26 @@ const styles = {
     borderRadius: 999,
     marginLeft: 6,
     verticalAlign: 'middle',
+  },
+  generateRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  secondaryButton: {
+    padding: '8px 14px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#2563eb',
+    backgroundColor: '#fff',
+    border: '1px solid #2563eb',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
+  generateError: {
+    fontSize: 13,
+    color: '#a94442',
   },
   field: {
     marginBottom: 20,

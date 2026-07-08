@@ -63,6 +63,7 @@ export default function Session() {
  
   const messageListRef = useRef(null);
   const sessionStartTimeRef = useRef(null);
+  const analysisPromiseRef = useRef(null);
  
   // Fetch the individual's profile, then the matching prompts for their tier
   useEffect(() => {
@@ -376,7 +377,7 @@ export default function Session() {
 
       if (isEndSession) {
         setSessionEnded(true);
-        runSessionAnalysis(activeSessionId, finalMessages);
+        analysisPromiseRef.current = runSessionAnalysis(activeSessionId, finalMessages);
       }
     } catch (err) {
       setChatError(err.message || 'Something went wrong. Please try again.');
@@ -421,11 +422,19 @@ export default function Session() {
     }
   };
  
-  const handleCompleteSession = () => {
+  const handleCompleteSession = async () => {
+    // The AI analysis is still writing went_well/challenge_noted/goal_moment/
+    // family_summary to the sessions row at this point — navigating before it
+    // resolves is exactly what left the log looking empty. Wait for it (it's
+    // already in flight, this doesn't start a new call) before moving on.
+    if (analysisPromiseRef.current) {
+      await analysisPromiseRef.current;
+    }
+
     const elapsedMinutes = sessionStartTimeRef.current
       ? Math.round((Date.now() - sessionStartTimeRef.current) / 60000)
       : null;
- 
+
     navigate('/session/' + sessionId + '/log', {
       state: {
         individual_id: individualId,
@@ -641,10 +650,15 @@ export default function Session() {
               )}
               <button
                 type="button"
-                style={styles.primaryButton}
+                style={{
+                  ...styles.primaryButton,
+                  opacity: analyzingSession ? 0.6 : 1,
+                  cursor: analyzingSession ? 'not-allowed' : 'pointer',
+                }}
                 onClick={handleCompleteSession}
+                disabled={analyzingSession}
               >
-                Complete Session
+                {analyzingSession ? 'Finishing up…' : 'Complete Session'}
               </button>
             </div>
           )}
