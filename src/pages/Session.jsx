@@ -50,6 +50,11 @@ export default function Session() {
   const [chatError, setChatError] = useState('');
   const [sessionEnded, setSessionEnded] = useState(false);
   const [lastFailedTurn, setLastFailedTurn] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [micSupported, setMicSupported] = useState(false);
+  const recognitionRef = useRef(null);
+  const [analyzingSession, setAnalyzingSession] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
  
   // Data to hand off to the session log form once the session completes
   const [sessionId, setSessionId] = useState(null);
@@ -111,7 +116,15 @@ export default function Session() {
         setError('Could not load scenario prompts for this tier.');
         setPrompts([]);
       } else {
-        setPrompts(promptsData || []);
+        // Rows missing a scenario_name or system_prompt can't be assembled
+        // into a usable session — skip them instead of showing a blank,
+        // unselectable option in the dropdown.
+        const usablePrompts = (promptsData || []).filter(
+          (prompt) =>
+            (prompt.scenario_name || '').trim() !== '' &&
+            (prompt.system_prompt || '').trim() !== ''
+        );
+        setPrompts(usablePrompts);
       }
  
       setLoading(false);
@@ -130,6 +143,47 @@ export default function Session() {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Set up speech-to-text for the message input, if the browser supports it.
+  // Not every browser implements the Web Speech API, so the mic button is
+  // hidden entirely rather than shown in a broken/disabled state.
+  useEffect(() => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setInputText((prev) => (prev ? prev + ' ' : '') + transcript);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognitionRef.current = recognition;
+    setMicSupported(true);
+
+    return () => {
+      recognition.stop();
+    };
+  }, []);
+
+  const handleMicClick = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      recognition.start();
+    }
+  };
  
   const handleStartSession = async () => {
     const selectedPrompt = prompts.find(
@@ -197,6 +251,67 @@ export default function Session() {
     });
   };
  
+  // Once the roleplay partner has said goodbye, the transcript is analyzed
+  // separately (in character, the roleplay partner should never break scene
+  // to produce a clinical write-up). The result is saved straight onto the
+  // sessions row so SessionLog opens with these categories already
+  // drafted — staff review/correct them and contribute staff_notes, rather
+  // than writing every category from scratch.
+  const runSessionAnalysis = async (sessionIdToUse, transcriptMessages) => {
+    setAnalyzingSession(true);
+    setAnalysisError('');
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/debrief', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token
+            ? { Authorization: 'Bearer ' + session.access_token }
+            : {}),
+        },
+        body: JSON.stringify({
+          transcript: transcriptMessages
+            .filter((m) => !m.hidden)
+            .map(({ role, content }) => ({ role, content })),
+          individual: {
+            full_name: individual.full_name,
+            goals: individual.goals,
+          },
+        }),
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error || 'Could not generate a session summary.');
+      }
+
+      const { error: updateError } = await supabase
+        .from('sessions')
+        .update({
+          went_well: data.went_well || null,
+          challenge_noted: data.challenge_noted || null,
+          goal_moment: data.goal_moment || null,
+          family_summary: data.family_summary || null,
+        })
+        .eq('id', sessionIdToUse);
+
+      if (updateError) {
+        throw new Error('Generated a summary but could not save it. You can fill in the log manually.');
+      }
+    } catch (err) {
+      setAnalysisError(err.message || 'Could not auto-generate a session summary.');
+    } finally {
+      setAnalyzingSession(false);
+    }
+  };
+
   const sendConversation = async (updatedMessages, isEndSession, overrides = {}) => {
     // Callers that just changed assembledPrompt/sessionId in the same tick
     // (i.e. handleStartSession) can't rely on reading them back from state
@@ -261,6 +376,7 @@ export default function Session() {
 
       if (isEndSession) {
         setSessionEnded(true);
+        runSessionAnalysis(activeSessionId, finalMessages);
       }
     } catch (err) {
       setChatError(err.message || 'Something went wrong. Please try again.');
@@ -345,10 +461,21 @@ export default function Session() {
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <h1 style={styles.name}>{individual.full_name}</h1>
-        <span style={{ ...styles.badge, ...tierStyle }}>
-          {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
-        </span>
+        <div>
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() => navigate('/individual/' + individualId)}
+          >
+            ← Back to Profile
+          </button>
+          <div style={styles.headerRow}>
+            <h1 style={styles.name}>{individual.full_name}</h1>
+            <span style={{ ...styles.badge, ...tierStyle }}>
+              {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
+            </span>
+          </div>
+        </div>
       </div>
  
       {error && <div style={styles.errorBanner}>{error}</div>}
@@ -462,6 +589,20 @@ export default function Session() {
                 style={styles.textInput}
                 rows={2}
               />
+              {micSupported && (
+                <button
+                  type="button"
+                  style={{
+                    ...styles.micButton,
+                    ...(isListening ? styles.micButtonActive : {}),
+                  }}
+                  onClick={handleMicClick}
+                  disabled={isSending}
+                  title={isListening ? 'Stop listening' : 'Speak your message'}
+                >
+                  {isListening ? '● Listening…' : '🎤'}
+                </button>
+              )}
               <button
                 type="button"
                 style={styles.primaryButton}
@@ -485,6 +626,19 @@ export default function Session() {
               <p style={styles.debriefText}>
                 {messages[messages.length - 1]?.content}
               </p>
+              {analyzingSession && (
+                <p style={styles.analysisStatus}>Generating session summary…</p>
+              )}
+              {analysisError && (
+                <p style={styles.analysisError}>
+                  {analysisError} You can fill in the log manually on the next screen.
+                </p>
+              )}
+              {!analyzingSession && !analysisError && (
+                <p style={styles.analysisStatus}>
+                  Session summary generated — review it on the next screen.
+                </p>
+              )}
               <button
                 type="button"
                 style={styles.primaryButton}
@@ -536,10 +690,22 @@ const styles = {
     borderRadius: 4,
   },
   header: {
+    marginBottom: 24,
+  },
+  backButton: {
+    padding: '4px 0',
+    marginBottom: 8,
+    fontSize: 13,
+    color: '#2563eb',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'block',
+  },
+  headerRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 24,
   },
   name: {
     fontSize: 24,
@@ -681,6 +847,22 @@ const styles = {
     resize: 'none',
     fontFamily: 'inherit',
   },
+  micButton: {
+    padding: '10px 14px',
+    fontSize: 16,
+    fontWeight: 600,
+    color: '#374151',
+    backgroundColor: '#fff',
+    border: '1px solid #ccc',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
+  micButtonActive: {
+    color: '#fff',
+    backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
+    fontSize: 13,
+  },
   debriefPanel: {
     padding: 20,
     borderTop: '1px solid #e5e7eb',
@@ -696,5 +878,16 @@ const styles = {
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
     marginBottom: 16,
+  },
+  analysisStatus: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    margin: '0 0 16px 0',
+  },
+  analysisError: {
+    fontSize: 13,
+    color: '#a94442',
+    margin: '0 0 16px 0',
   },
 };

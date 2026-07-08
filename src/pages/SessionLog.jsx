@@ -98,6 +98,7 @@ export default function SessionLog() {
 
   const scenarioUsed = session?.scenario_used || stateScenarioUsed;
   const transcript = (session?.transcript || []).filter((message) => !message.hidden);
+  const backTargetId = session?.individual_id || stateIndividualId;
 
   const handleSubmit = async () => {
     setError('');
@@ -176,6 +177,15 @@ export default function SessionLog() {
 
   return (
     <div style={styles.page}>
+      {backTargetId && (
+        <button
+          type="button"
+          style={styles.backButton}
+          onClick={() => navigate('/individual/' + backTargetId)}
+        >
+          ← Back to Profile
+        </button>
+      )}
       <h1 style={styles.heading}>Session Log</h1>
       {scenarioUsed && (
         <p style={styles.subheading}>Scenario: {scenarioUsed}</p>
@@ -184,6 +194,12 @@ export default function SessionLog() {
       {loadError && <div style={styles.errorBanner}>{loadError}</div>}
       {error && <div style={styles.errorBanner}>{error}</div>}
       {success && <div style={styles.successBanner}>Session saved! Redirecting...</div>}
+
+      <p style={styles.aiNotice}>
+        The sections below are drafted automatically from the session transcript. Review each
+        for accuracy and correct anything that's off — then add your own observations under
+        Staff Notes.
+      </p>
 
       {transcript && transcript.length > 0 && (
         <details style={styles.transcriptPanel}>
@@ -205,7 +221,7 @@ export default function SessionLog() {
 
       <div style={styles.field}>
         <label style={styles.label} htmlFor="went-well">
-          What went well?
+          What went well? <span style={styles.aiTag}>AI-drafted</span>
         </label>
         <textarea
           id="went-well"
@@ -214,13 +230,13 @@ export default function SessionLog() {
           style={styles.textarea}
           rows={4}
           disabled={disabled}
-          placeholder="Describe what went well during the session..."
+          placeholder="Generated after the session ends — or describe what went well yourself..."
         />
       </div>
 
       <div style={styles.field}>
         <label style={styles.label} htmlFor="challenge-noted">
-          Challenges noted
+          Challenges noted <span style={styles.aiTag}>AI-drafted</span>
         </label>
         <textarea
           id="challenge-noted"
@@ -229,13 +245,13 @@ export default function SessionLog() {
           style={styles.textarea}
           rows={4}
           disabled={disabled}
-          placeholder="Describe any challenges or unexpected moments..."
+          placeholder="Generated after the session ends — or describe any challenges yourself..."
         />
       </div>
 
       <div style={styles.field}>
         <label style={styles.label} htmlFor="goal-moment">
-          Goal moment
+          Goal moment <span style={styles.aiTag}>AI-drafted</span>
         </label>
         <textarea
           id="goal-moment"
@@ -244,28 +260,13 @@ export default function SessionLog() {
           style={styles.textarea}
           rows={4}
           disabled={disabled}
-          placeholder="One specific goal-relevant moment you observed..."
-        />
-      </div>
-
-      <div style={styles.field}>
-        <label style={styles.label} htmlFor="staff-notes">
-          Staff notes
-        </label>
-        <textarea
-          id="staff-notes"
-          value={staffNotes}
-          onChange={(e) => setStaffNotes(e.target.value)}
-          style={styles.textarea}
-          rows={4}
-          disabled={disabled}
-          placeholder="Additional clinical notes (staff-only)..."
+          placeholder="Generated after the session ends — or describe a goal-relevant moment yourself..."
         />
       </div>
 
       <div style={styles.field}>
         <label style={styles.label} htmlFor="family-summary">
-          Family-facing summary
+          Family-facing summary <span style={styles.aiTag}>AI-drafted</span>
         </label>
         <p style={styles.hint}>
           Shown directly to family members in their view — keep it warm, general, and free of clinical language.
@@ -278,6 +279,24 @@ export default function SessionLog() {
           rows={3}
           disabled={disabled}
           placeholder="e.g. Today we practiced ordering at a restaurant and had a great time!"
+        />
+      </div>
+
+      <div style={styles.field}>
+        <label style={styles.label} htmlFor="staff-notes">
+          Staff notes
+        </label>
+        <p style={styles.hint}>
+          Your own observations — this is the one section the AI never fills in for you.
+        </p>
+        <textarea
+          id="staff-notes"
+          value={staffNotes}
+          onChange={(e) => setStaffNotes(e.target.value)}
+          style={styles.textarea}
+          rows={4}
+          disabled={disabled}
+          placeholder="Additional clinical notes (staff-only)..."
         />
       </div>
 
@@ -319,6 +338,16 @@ const styles = {
     fontFamily: 'sans-serif',
     maxWidth: 640,
     margin: '0 auto',
+  },
+  backButton: {
+    padding: '4px 0',
+    marginBottom: 8,
+    fontSize: 13,
+    color: '#2563eb',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'block',
   },
   heading: {
     fontSize: 22,
@@ -389,6 +418,26 @@ const styles = {
     backgroundColor: '#d8f3dc',
     border: '1px solid #b7e4c7',
     borderRadius: 4,
+  },
+  aiNotice: {
+    margin: '0 0 24px 0',
+    padding: '10px 14px',
+    fontSize: 13,
+    color: '#374151',
+    backgroundColor: '#eff6ff',
+    border: '1px solid #bfdbfe',
+    borderRadius: 4,
+    lineHeight: 1.5,
+  },
+  aiTag: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#1e40af',
+    backgroundColor: '#dbeafe',
+    padding: '2px 6px',
+    borderRadius: 999,
+    marginLeft: 6,
+    verticalAlign: 'middle',
   },
   field: {
     marginBottom: 20,

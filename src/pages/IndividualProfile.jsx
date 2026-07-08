@@ -124,6 +124,13 @@ export default function IndividualProfile() {
     <div style={styles.page}>
       <div style={styles.header}>
         <div>
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() => navigate('/dashboard')}
+          >
+            ← Back to Dashboard
+          </button>
           <h1 style={styles.name}>{individual.full_name}</h1>
           <span style={{ ...styles.badge, ...tierStyle }}>
             {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
@@ -260,6 +267,16 @@ const styles = {
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: 24,
+  },
+  backButton: {
+    padding: '4px 0',
+    marginBottom: 8,
+    fontSize: 13,
+    color: '#2563eb',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'block',
   },
   name: {
     fontSize: 24,
