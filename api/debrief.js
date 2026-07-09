@@ -41,6 +41,26 @@ const ANALYSIS_TOOL = {
   },
 };
 
+// Used for family/caregiver-run sessions, where there's no staff review step
+// and no reason to generate clinical categories nobody will read — just the
+// one field the family view actually shows.
+const FAMILY_SUMMARY_TOOL = {
+  name: 'log_family_summary',
+  description:
+    'Records a warm, plain-language summary of a completed practice session, written for the individual\'s family.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      family_summary: {
+        type: 'string',
+        description:
+          'A warm, plain-language 1-3 sentence summary suitable for sharing directly with family members. No clinical language.',
+      },
+    },
+    required: ['family_summary'],
+  },
+};
+
 function buildAnalysisSystemPrompt(individual) {
   return `You are a clinical support assistant for staff running AI-assisted communication practice sessions with ${
     individual?.full_name || 'an individual'
@@ -49,6 +69,16 @@ function buildAnalysisSystemPrompt(individual) {
 You will receive the full transcript of a completed roleplay practice session. In the transcript, "assistant" turns are the in-character roleplay partner, and "user" turns are what the individual communicated.
 
 Analyze only what actually happened in this transcript — never invent details it doesn't support. Call the log_session_analysis tool with your analysis. If a category genuinely doesn't apply, say so briefly and honestly rather than fabricating detail.`;
+}
+
+function buildFamilySummarySystemPrompt(individual) {
+  return `A family member or caregiver just supervised a communication practice roleplay with ${
+    individual?.full_name || 'an individual'
+  }, whose communication goal is: ${individual?.goals || 'not specified'}.
+
+You will receive the full transcript. In it, "assistant" turns are the in-character roleplay partner, and "user" turns are what the individual communicated.
+
+Call the log_family_summary tool with a short, warm summary of what happened, written directly for the family — plain language, no clinical or technical terms. Base it only on what actually happened in the transcript.`;
 }
 
 export default async function handler(req, res) {
@@ -70,11 +100,17 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired session.' });
   }
 
-  const { transcript, individual } = req.body || {};
+  const { transcript, individual, mode } = req.body || {};
 
   if (!Array.isArray(transcript) || transcript.length === 0) {
     return res.status(400).json({ error: '"transcript" must be a non-empty array.' });
   }
+
+  const familySummaryOnly = mode === 'family_summary_only';
+  const tool = familySummaryOnly ? FAMILY_SUMMARY_TOOL : ANALYSIS_TOOL;
+  const systemPrompt = familySummaryOnly
+    ? buildFamilySummarySystemPrompt(individual)
+    : buildAnalysisSystemPrompt(individual);
 
   let anthropic;
   try {
@@ -94,15 +130,15 @@ export default async function handler(req, res) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1024,
-      system: buildAnalysisSystemPrompt(individual),
+      system: systemPrompt,
       messages: [
         {
           role: 'user',
           content: 'Here is the session transcript:\n\n' + transcriptText,
         },
       ],
-      tools: [ANALYSIS_TOOL],
-      tool_choice: { type: 'tool', name: 'log_session_analysis' },
+      tools: [tool],
+      tool_choice: { type: 'tool', name: tool.name },
     });
 
     const toolUse = response.content.find((block) => block.type === 'tool_use');

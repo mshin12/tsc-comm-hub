@@ -13,6 +13,7 @@ import AllSessions from './pages/AllSessions';
 import Session from './pages/Session';
 import SessionLog from './pages/SessionLog';
 import FamilyView from './pages/FamilyView';
+import FamilySession from './pages/FamilySession';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const STAFF_ROLES = ['staff', 'admin'];
@@ -71,6 +72,14 @@ export default function App() {
           element={
             <ProtectedRoute allowedRoles={['family']}>
               <FamilyView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/family/session"
+          element={
+            <ProtectedRoute allowedRoles={['family']}>
+              <FamilySession />
             </ProtectedRoute>
           }
         />

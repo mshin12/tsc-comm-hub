@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { logAction } from '../lib/auditLog';
@@ -16,6 +17,7 @@ function formatDate(dateString) {
 }
 
 export default function FamilyView() {
+  const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
   const [individual, setIndividual] = useState(null);
@@ -107,6 +109,13 @@ export default function FamilyView() {
         <h1 style={styles.heroTitle}>
           {individual.full_name}'s Communication Journey
         </h1>
+        <button
+          type="button"
+          style={styles.practiceButton}
+          onClick={() => navigate('/family/session')}
+        >
+          Start Practicing →
+        </button>
       </div>
 
       {error && <div style={styles.errorBanner}>{error}</div>}
@@ -190,8 +199,18 @@ const styles = {
     fontSize: 26,
     fontWeight: 700,
     color: '#92400e',
-    margin: 0,
+    margin: '0 0 16px 0',
     lineHeight: 1.3,
+  },
+  practiceButton: {
+    padding: '12px 20px',
+    fontSize: 15,
+    fontWeight: 700,
+    color: '#fff',
+    backgroundColor: '#d97706',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
   },
   section: {
     marginBottom: 32,

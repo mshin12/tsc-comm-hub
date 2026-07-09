@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { assemblePrompt } from '../lib/assemblePrompt';
 import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
-import { logAction } from '../lib/auditLog';
 import { useVoiceInput } from '../hooks/useVoiceInput';
- 
+
 const END_SESSION_KEYWORD = 'END SESSION';
 
 function isEndSessionText(text) {
@@ -14,37 +13,28 @@ function isEndSessionText(text) {
 }
 
 // Sent automatically the moment a session starts, so the AI opens the scene
-// in character instead of the staff/individual having to know a magic
-// phrase. It's flagged `hidden` so it never renders as a chat bubble, but it
-// still counts as a real turn for the API (which requires the conversation
-// to start with a "user" message) and is still saved in the transcript.
+// in character instead of anyone having to know a magic phrase. Flagged
+// `hidden` so it never renders as a chat bubble, but it still counts as a
+// real turn for the API and is still saved in the transcript.
 const KICKOFF_MESSAGE = {
   role: 'user',
   content: 'The session is starting now. Begin the activity following your instructions.',
   hidden: true,
 };
- 
-const TIER_COLORS = {
-  1: { backgroundColor: '#dbeafe', color: '#1e40af' },
-  2: { backgroundColor: '#fef9c3', color: '#854d0e' },
-  3: { backgroundColor: '#dcfce7', color: '#166534' },
-};
- 
-export default function Session() {
-  const { individualId } = useParams();
+
+export default function FamilySession() {
   const navigate = useNavigate();
-  const { user, role, loading: authLoading } = useAuth();
- 
+  const { user, loading: authLoading } = useAuth();
+
   const [individual, setIndividual] = useState(null);
-  const [prompts, setPrompts] = useState([]);
-  const [selectedPromptId, setSelectedPromptId] = useState('');
-  const [loading, setLoading] = useState(!!individualId);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
- 
+  const [startingId, setStartingId] = useState(null);
+
   const [assembledPrompt, setAssembledPrompt] = useState('');
   const [sessionActive, setSessionActive] = useState(false);
- 
-  // Conversation state
+
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -53,190 +43,102 @@ export default function Session() {
   const [lastFailedTurn, setLastFailedTurn] = useState(null);
   const [analyzingSession, setAnalyzingSession] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
- 
-  // Data to hand off to the session log form once the session completes
+
   const [sessionId, setSessionId] = useState(null);
-  const [scenarioUsed, setScenarioUsed] = useState('');
-  const [isStarting, setIsStarting] = useState(false);
- 
+
   const messageListRef = useRef(null);
-  const sessionStartTimeRef = useRef(null);
   const analysisPromiseRef = useRef(null);
- 
-  // Fetch the individual's profile, then the matching prompts for their tier
+
+  const { isListening, supported: micSupported, toggleListening } = useVoiceInput(
+    (transcript) => setInputText((prev) => (prev ? prev + ' ' : '') + transcript)
+  );
+
   useEffect(() => {
     if (authLoading) return;
-    if (!individualId) {
-      setLoading(false);
-      return;
-    }
     if (!user) {
-      setError('You must be signed in to view this page.');
       setLoading(false);
       return;
     }
- 
+
     let isMounted = true;
- 
+
     const fetchData = async () => {
       setLoading(true);
       setError('');
- 
-      let individualQuery = supabase
+
+      const { data: individualData, error: individualError } = await supabase
         .from('individuals')
         .select('*')
-        .eq('id', individualId);
-      if (role !== 'admin') {
-        individualQuery = individualQuery.contains('assigned_staff', [user.id]);
-      }
+        .eq('family_user_id', user.id)
+        .single();
 
-      const { data: individualData, error: individualError } = await individualQuery.single();
- 
       if (!isMounted) return;
- 
+
       if (individualError || !individualData) {
-        setError('Could not load this individual\u2019s profile.');
+        setError('Could not find a linked individual for your account.');
         setLoading(false);
         return;
       }
- 
+
       setIndividual(individualData);
 
       const tierNumber = parseTierNumber(individualData.communication_tier);
-      const { data: promptsData, error: promptsError } = await supabase
+      const { data: activitiesData, error: activitiesError } = await supabase
         .from('prompts')
         .select('*')
         .eq('tier', tierNumber)
-        .eq('is_active', true);
- 
+        .eq('is_active', true)
+        .eq('audience', 'family');
+
       if (!isMounted) return;
- 
-      if (promptsError) {
-        setError('Could not load scenario prompts for this tier.');
-        setPrompts([]);
+
+      if (activitiesError) {
+        setError('Could not load practice activities.');
+        setActivities([]);
       } else {
-        // Rows missing a scenario_name or system_prompt can't be assembled
-        // into a usable session — skip them instead of showing a blank,
-        // unselectable option in the dropdown.
-        const usablePrompts = (promptsData || []).filter(
-          (prompt) =>
-            (prompt.scenario_name || '').trim() !== '' &&
-            (prompt.system_prompt || '').trim() !== ''
+        const usable = (activitiesData || []).filter(
+          (activity) =>
+            (activity.scenario_name || '').trim() !== '' &&
+            (activity.system_prompt || '').trim() !== ''
         );
-        setPrompts(usablePrompts);
+        setActivities(usable);
       }
- 
+
       setLoading(false);
     };
- 
+
     fetchData();
- 
+
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user, role, individualId]);
- 
-  // Auto-scroll to the latest message whenever the conversation updates
+  }, [authLoading, user]);
+
   useEffect(() => {
     if (messageListRef.current) {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
   }, [messages]);
 
-  const { isListening, supported: micSupported, toggleListening } = useVoiceInput(
-    (transcript) => setInputText((prev) => (prev ? prev + ' ' : '') + transcript)
-  );
-
-  const handleStartSession = async () => {
-    const selectedPrompt = prompts.find(
-      (prompt) => String(prompt.id) === String(selectedPromptId)
-    );
- 
-    if (!selectedPrompt || !individual) {
-      setError('Please select a scenario before starting the session.');
-      return;
-    }
- 
-    if (!user) {
-      setError('You must be signed in to start a session.');
-      return;
-    }
- 
-    setError('');
-    setIsStarting(true);
- 
-    const startTime = Date.now();
- 
-    const { data: sessionRow, error: insertError } = await supabase
-      .from('sessions')
-      .insert({
-        individual_id: individualId,
-        staff_id: user.id,
-        session_date: new Date(startTime).toISOString(),
-        tier_used: parseTierNumber(individual.communication_tier),
-        scenario_used: selectedPrompt.scenario_name,
-      })
-      .select()
-      .single();
- 
-    setIsStarting(false);
- 
-    if (insertError || !sessionRow) {
-      setError('Could not start the session. Please try again.');
-      return;
-    }
- 
-    const builtPrompt = assemblePrompt(
-      selectedPrompt.system_prompt,
-      individual,
-      selectedPrompt.scenario_name
-    );
-
-    sessionStartTimeRef.current = startTime;
-    setSessionId(sessionRow.id);
-    setScenarioUsed(selectedPrompt.scenario_name);
-    setAssembledPrompt(builtPrompt);
-    setSessionActive(true);
-
-    logAction('session_started', {
-      tableName: 'sessions',
-      recordId: sessionRow.id,
-      metadata: { individual_id: individualId, scenario_used: selectedPrompt.scenario_name },
-    });
-
-    // setAssembledPrompt/setSessionId above won't be visible to this closure
-    // until the next render, so pass the freshly-built values through
-    // explicitly rather than letting sendConversation read stale state.
-    sendConversation([KICKOFF_MESSAGE], false, {
-      systemPrompt: builtPrompt,
-      sessionId: sessionRow.id,
-    });
-  };
- 
-  // Once the roleplay partner has said goodbye, the transcript is analyzed
-  // separately (in character, the roleplay partner should never break scene
-  // to produce a clinical write-up). The result is saved straight onto the
-  // sessions row so SessionLog opens with these categories already
-  // drafted — staff review/correct them and contribute staff_notes, rather
-  // than writing every category from scratch.
-  const runSessionAnalysis = async (sessionIdToUse, transcriptMessages) => {
+  const runFamilySummary = async (sessionIdToUse, transcriptMessages) => {
     setAnalyzingSession(true);
     setAnalysisError('');
 
     try {
       const {
-        data: { session },
+        data: { session: authSession },
       } = await supabase.auth.getSession();
 
       const response = await fetch('/api/debrief', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(session?.access_token
-            ? { Authorization: 'Bearer ' + session.access_token }
+          ...(authSession?.access_token
+            ? { Authorization: 'Bearer ' + authSession.access_token }
             : {}),
         },
         body: JSON.stringify({
+          mode: 'family_summary_only',
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
             .map(({ role, content }) => ({ role, content })),
@@ -251,34 +153,63 @@ export default function Session() {
       const data = contentType.includes('application/json') ? await response.json() : null;
 
       if (!response.ok || !data) {
-        throw new Error(data?.error || 'Could not generate a session summary.');
+        throw new Error(data?.error || 'Could not generate a summary.');
       }
 
       const { error: updateError } = await supabase
         .from('sessions')
-        .update({
-          went_well: data.went_well || null,
-          challenge_noted: data.challenge_noted || null,
-          goal_moment: data.goal_moment || null,
-          family_summary: data.family_summary || null,
-        })
+        .update({ family_summary: data.family_summary || null })
         .eq('id', sessionIdToUse);
 
       if (updateError) {
-        throw new Error('Generated a summary but could not save it. You can fill in the log manually.');
+        throw new Error('Generated a summary but could not save it.');
       }
     } catch (err) {
-      setAnalysisError(err.message || 'Could not auto-generate a session summary.');
+      setAnalysisError(err.message || 'Could not generate a summary for this session.');
     } finally {
       setAnalyzingSession(false);
     }
   };
 
+  const handleStartActivity = async (activity) => {
+    if (!individual || !user) return;
+
+    setError('');
+    setStartingId(activity.id);
+
+    const { data: sessionRow, error: insertError } = await supabase
+      .from('sessions')
+      .insert({
+        individual_id: individual.id,
+        conducted_by: 'family',
+        family_user_id: user.id,
+        session_date: new Date().toISOString(),
+        tier_used: parseTierNumber(individual.communication_tier),
+        scenario_used: activity.scenario_name,
+      })
+      .select()
+      .single();
+
+    setStartingId(null);
+
+    if (insertError || !sessionRow) {
+      setError('Could not start the activity. Please try again.');
+      return;
+    }
+
+    const builtPrompt = assemblePrompt(activity.system_prompt, individual, activity.scenario_name);
+
+    setSessionId(sessionRow.id);
+    setAssembledPrompt(builtPrompt);
+    setSessionActive(true);
+
+    sendConversation([KICKOFF_MESSAGE], false, {
+      systemPrompt: builtPrompt,
+      sessionId: sessionRow.id,
+    });
+  };
+
   const sendConversation = async (updatedMessages, isEndSession, overrides = {}) => {
-    // Callers that just changed assembledPrompt/sessionId in the same tick
-    // (i.e. handleStartSession) can't rely on reading them back from state
-    // yet, since React hasn't re-rendered — pass the fresh values through
-    // explicitly instead.
     const activeSystemPrompt = overrides.systemPrompt ?? assembledPrompt;
     const activeSessionId = overrides.sessionId ?? sessionId;
 
@@ -305,9 +236,7 @@ export default function Session() {
       });
 
       const contentType = response.headers.get('content-type') || '';
-      const data = contentType.includes('application/json')
-        ? await response.json()
-        : null;
+      const data = contentType.includes('application/json') ? await response.json() : null;
 
       if (!response.ok) {
         throw new Error(data?.error || 'The assistant could not respond. Please try again.');
@@ -338,7 +267,7 @@ export default function Session() {
 
       if (isEndSession) {
         setSessionEnded(true);
-        analysisPromiseRef.current = runSessionAnalysis(activeSessionId, finalMessages);
+        analysisPromiseRef.current = runFamilySummary(activeSessionId, finalMessages);
       }
     } catch (err) {
       setChatError(err.message || 'Something went wrong. Please try again.');
@@ -361,7 +290,7 @@ export default function Session() {
     sendConversation(updatedMessages, isEndSession);
   };
 
-  const handleEndSessionClick = () => {
+  const handleFinishClick = () => {
     if (isSending) return;
 
     const userMessage = { role: 'user', content: END_SESSION_KEYWORD };
@@ -375,163 +304,109 @@ export default function Session() {
     if (!lastFailedTurn) return;
     sendConversation(lastFailedTurn.messages, lastFailedTurn.isEndSession, lastFailedTurn.overrides);
   };
- 
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
- 
-  const handleCompleteSession = async () => {
-    // The AI analysis is still writing went_well/challenge_noted/goal_moment/
-    // family_summary to the sessions row at this point — navigating before it
-    // resolves is exactly what left the log looking empty. Wait for it (it's
-    // already in flight, this doesn't start a new call) before moving on.
+
+  const handleReturnToOverview = async () => {
     if (analysisPromiseRef.current) {
       await analysisPromiseRef.current;
     }
-
-    const elapsedMinutes = sessionStartTimeRef.current
-      ? Math.round((Date.now() - sessionStartTimeRef.current) / 60000)
-      : null;
-
-    navigate('/session/' + sessionId + '/log', {
-      state: {
-        individual_id: individualId,
-        scenario_used: scenarioUsed,
-        session_length: elapsedMinutes,
-      },
-    });
+    navigate('/family');
   };
- 
+
   if (loading) {
     return (
       <div style={styles.centered}>
         <div style={styles.spinner} />
+        <style>{`@keyframes family-session-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
- 
+
   if (!individual) {
     return (
-      <div style={styles.errorBanner}>
-        {error || 'Individual not found.'}
+      <div style={styles.page}>
+        <div style={styles.errorBanner}>{error || 'Could not find a linked individual.'}</div>
       </div>
     );
   }
- 
-  const tierNumber = parseTierNumber(individual.communication_tier);
-  const tierStyle =
-    TIER_COLORS[tierNumber] || {
-      backgroundColor: '#e5e7eb',
-      color: '#374151',
-    };
 
   return (
     <div style={styles.page}>
-      <div style={styles.header}>
-        <div>
-          <button
-            type="button"
-            style={styles.backButton}
-            onClick={() => navigate('/individual/' + individualId)}
-          >
-            ← Back to Profile
-          </button>
-          <div style={styles.headerRow}>
-            <h1 style={styles.name}>{individual.full_name}</h1>
-            <span style={{ ...styles.badge, ...tierStyle }}>
-              {tierNumber !== null ? 'Tier ' + tierNumber : 'Tier —'}
-            </span>
-          </div>
-        </div>
-      </div>
- 
+      <button type="button" style={styles.backButton} onClick={() => navigate('/family')}>
+        ← Back to Overview
+      </button>
+
+      <h1 style={styles.name}>Practice with {individual.full_name}</h1>
+
       {error && <div style={styles.errorBanner}>{error}</div>}
- 
+
       {!sessionActive && (
         <div style={styles.setupPanel}>
-          {prompts.length === 0 ? (
+          {activities.length === 0 ? (
             <p style={styles.text}>
-              No active scenarios are available for this individual's tier yet.
-              Please contact your program coordinator.
+              No practice activities are available yet. Please check back soon.
             </p>
           ) : (
             <>
-              <label style={styles.label} htmlFor="scenario-select">
-                Choose a scenario
-              </label>
-              <select
-                id="scenario-select"
-                value={selectedPromptId}
-                onChange={(e) => setSelectedPromptId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">-- Select a scenario --</option>
-                {prompts.map((prompt) => (
-                  <option key={prompt.id} value={prompt.id}>
-                    {prompt.scenario_name}
-                  </option>
+              <p style={styles.text}>Choose an activity to practice together:</p>
+              <div style={styles.activityGrid}>
+                {activities.map((activity) => (
+                  <button
+                    key={activity.id}
+                    type="button"
+                    style={styles.activityCard}
+                    onClick={() => handleStartActivity(activity)}
+                    disabled={startingId !== null}
+                  >
+                    {startingId === activity.id ? 'Starting…' : activity.scenario_name}
+                  </button>
                 ))}
-              </select>
-
-              <button
-                type="button"
-                style={styles.primaryButton}
-                onClick={handleStartSession}
-                disabled={!selectedPromptId || isStarting}
-              >
-                {isStarting ? 'Starting...' : 'Start Session'}
-              </button>
+              </div>
             </>
           )}
         </div>
       )}
- 
-      {/* Conversation section: active once a session has been started */}
+
       {sessionActive && (
         <div style={styles.chatPanel}>
           <div style={styles.messageList} ref={messageListRef}>
             {messages.filter((m) => !m.hidden).length === 0 && !isSending && (
-              <div style={styles.emptyChat}>
-                Waiting for the session to begin...
-              </div>
+              <div style={styles.emptyChat}>Getting things ready…</div>
             )}
-            {messages.filter((m) => !m.hidden).map((message, index) => (
-              <div
-                key={index}
-                style={{
-                  ...styles.messageRow,
-                  justifyContent:
-                    message.role === 'user' ? 'flex-end' : 'flex-start',
-                }}
-              >
+            {messages
+              .filter((m) => !m.hidden)
+              .map((message, index) => (
                 <div
+                  key={index}
                   style={{
-                    ...styles.messageBubble,
-                    ...(message.role === 'user'
-                      ? styles.userBubble
-                      : styles.assistantBubble),
+                    ...styles.messageRow,
+                    justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
                   }}
                 >
-                  {message.content}
-                  {message.truncated && (
-                    <div style={styles.truncatedNote}>
-                      This response may have been cut short.
-                    </div>
-                  )}
+                  <div
+                    style={{
+                      ...styles.messageBubble,
+                      ...(message.role === 'user' ? styles.userBubble : styles.assistantBubble),
+                    }}
+                  >
+                    {message.content}
+                  </div>
                 </div>
-              </div>
-            ))}
- 
+              ))}
+
             {isSending && (
               <div style={styles.messageRow}>
                 <div style={styles.typingIndicator}>Thinking...</div>
               </div>
             )}
           </div>
- 
+
           {chatError && (
             <div style={styles.errorBanner}>
               {chatError}
@@ -547,7 +422,7 @@ export default function Session() {
               )}
             </div>
           )}
- 
+
           {!sessionEnded ? (
             <div style={styles.inputRow}>
               <textarea
@@ -555,7 +430,7 @@ export default function Session() {
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isSending}
-                placeholder="Type a message..."
+                placeholder="Type here, or use the mic…"
                 style={styles.textInput}
                 rows={2}
               />
@@ -584,31 +459,20 @@ export default function Session() {
               <button
                 type="button"
                 style={styles.secondaryButton}
-                onClick={handleEndSessionClick}
+                onClick={handleFinishClick}
                 disabled={isSending}
               >
-                End Session
+                I'm Done Practicing
               </button>
             </div>
           ) : (
             <div style={styles.debriefPanel}>
-              <h2 style={styles.debriefTitle}>Session Debrief</h2>
-              <p style={styles.debriefText}>
-                {messages[messages.length - 1]?.content}
-              </p>
+              <h2 style={styles.debriefTitle}>Great job!</h2>
+              <p style={styles.debriefText}>{messages[messages.length - 1]?.content}</p>
               {analyzingSession && (
-                <p style={styles.analysisStatus}>Generating session summary…</p>
+                <p style={styles.analysisStatus}>Saving a summary of today's practice…</p>
               )}
-              {analysisError && (
-                <p style={styles.analysisError}>
-                  {analysisError} You can fill in the log manually on the next screen.
-                </p>
-              )}
-              {!analyzingSession && !analysisError && (
-                <p style={styles.analysisStatus}>
-                  Session summary generated — review it on the next screen.
-                </p>
-              )}
+              {analysisError && <p style={styles.analysisError}>{analysisError}</p>}
               <button
                 type="button"
                 style={{
@@ -616,25 +480,19 @@ export default function Session() {
                   opacity: analyzingSession ? 0.6 : 1,
                   cursor: analyzingSession ? 'not-allowed' : 'pointer',
                 }}
-                onClick={handleCompleteSession}
+                onClick={handleReturnToOverview}
                 disabled={analyzingSession}
               >
-                {analyzingSession ? 'Finishing up…' : 'Complete Session'}
+                {analyzingSession ? 'Finishing up…' : 'Return to Overview'}
               </button>
             </div>
           )}
         </div>
       )}
- 
-      <style>{`
-        @keyframes session-spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }
- 
+
 const styles = {
   page: {
     padding: 24,
@@ -652,9 +510,24 @@ const styles = {
     width: 40,
     height: 40,
     border: '4px solid #e0e0e0',
-    borderTopColor: '#2563eb',
+    borderTopColor: '#d97706',
     borderRadius: '50%',
-    animation: 'session-spin 0.8s linear infinite',
+    animation: 'family-session-spin 0.8s linear infinite',
+  },
+  backButton: {
+    padding: '4px 0',
+    marginBottom: 8,
+    fontSize: 13,
+    color: '#b45309',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'block',
+  },
+  name: {
+    fontSize: 22,
+    margin: '0 0 20px 0',
+    color: '#78350f',
   },
   errorBanner: {
     margin: '16px 0',
@@ -664,70 +537,32 @@ const styles = {
     border: '1px solid #ebccd1',
     borderRadius: 4,
   },
-  header: {
-    marginBottom: 24,
-  },
-  backButton: {
-    padding: '4px 0',
-    marginBottom: 8,
-    fontSize: 13,
-    color: '#2563eb',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    display: 'block',
-  },
-  headerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-  },
-  name: {
-    fontSize: 24,
-    margin: 0,
-  },
-  badge: {
-    fontSize: 12,
-    fontWeight: 600,
-    padding: '2px 10px',
-    borderRadius: 999,
-  },
   setupPanel: {
     padding: 20,
-    backgroundColor: '#f9fafb',
-    border: '1px solid #e5e7eb',
+    backgroundColor: '#fffbeb',
+    border: '1px solid #fde68a',
     borderRadius: 8,
   },
   text: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#374151',
-    margin: 0,
+    margin: '0 0 16px 0',
   },
-  label: {
-    display: 'block',
-    marginBottom: 6,
-    fontSize: 14,
+  activityGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  activityCard: {
+    padding: '18px 20px',
+    fontSize: 16,
     fontWeight: 600,
-    color: '#333',
-  },
-  select: {
-    width: '100%',
-    padding: '10px 12px',
-    fontSize: 14,
-    border: '1px solid #ccc',
-    borderRadius: 4,
-    marginBottom: 16,
-    boxSizing: 'border-box',
-  },
-  primaryButton: {
-    padding: '10px 16px',
-    fontSize: 14,
-    fontWeight: 600,
-    color: '#fff',
-    backgroundColor: '#2563eb',
-    border: 'none',
-    borderRadius: 4,
+    color: '#92400e',
+    backgroundColor: '#fff',
+    border: '2px solid #fbbf24',
+    borderRadius: 10,
     cursor: 'pointer',
+    textAlign: 'left',
   },
   chatPanel: {
     marginTop: 20,
@@ -739,7 +574,7 @@ const styles = {
     backgroundColor: '#fff',
   },
   messageList: {
-    height: 360,
+    height: 400,
     overflowY: 'auto',
     padding: 16,
     display: 'flex',
@@ -757,15 +592,15 @@ const styles = {
     width: '100%',
   },
   messageBubble: {
-    maxWidth: '75%',
-    padding: '10px 14px',
-    borderRadius: 12,
-    fontSize: 14,
-    lineHeight: 1.4,
+    maxWidth: '80%',
+    padding: '12px 16px',
+    borderRadius: 14,
+    fontSize: 16,
+    lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
   },
   userBubble: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#d97706',
     color: '#fff',
     borderBottomRightRadius: 2,
   },
@@ -780,12 +615,6 @@ const styles = {
     fontStyle: 'italic',
     padding: '4px 8px',
   },
-  truncatedNote: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#9ca3af',
-    marginTop: 4,
-  },
   retryButton: {
     padding: '6px 12px',
     fontSize: 13,
@@ -797,26 +626,17 @@ const styles = {
     cursor: 'pointer',
     marginLeft: 10,
   },
-  secondaryButton: {
-    padding: '10px 16px',
-    fontSize: 14,
-    fontWeight: 600,
-    color: '#2563eb',
-    backgroundColor: '#fff',
-    border: '1px solid #2563eb',
-    borderRadius: 4,
-    cursor: 'pointer',
-  },
   inputRow: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: 8,
     padding: 12,
     borderTop: '1px solid #e5e7eb',
   },
   textInput: {
-    flex: 1,
+    flex: '1 1 200px',
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 15,
     border: '1px solid #ccc',
     borderRadius: 4,
     resize: 'none',
@@ -838,17 +658,38 @@ const styles = {
     borderColor: '#dc2626',
     fontSize: 13,
   },
+  primaryButton: {
+    padding: '10px 16px',
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#fff',
+    backgroundColor: '#d97706',
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
+  secondaryButton: {
+    padding: '10px 16px',
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#b45309',
+    backgroundColor: '#fff',
+    border: '1px solid #b45309',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
   debriefPanel: {
     padding: 20,
     borderTop: '1px solid #e5e7eb',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#fffbeb',
   },
   debriefTitle: {
-    fontSize: 16,
+    fontSize: 18,
     margin: '0 0 8px 0',
+    color: '#78350f',
   },
   debriefText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#374151',
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
