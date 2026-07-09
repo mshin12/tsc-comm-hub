@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
+import SpeakButton from "../components/SpeakButton";
  
 const TIER_COLORS = {
   1: { backgroundColor: '#dbeafe', color: '#1e40af' }, // blue
@@ -122,7 +123,7 @@ export default function StaffDashboard() {
       <h1 style={styles.heading}>
         {role === 'admin' ? 'All Individuals' : 'My Individuals'}
       </h1>
-
+      <SpeakButton />
       {individuals.length === 0 ? (
         <div style={styles.emptyState}>
           {role === 'admin' ? 'No active individuals yet' : 'No individuals assigned yet'}
