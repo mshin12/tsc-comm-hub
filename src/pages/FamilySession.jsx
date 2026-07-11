@@ -517,7 +517,7 @@ const styles = {
   backButton: {
     padding: '4px 0',
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 16,
     color: '#b45309',
     background: 'none',
     border: 'none',
@@ -525,7 +525,7 @@ const styles = {
     display: 'block',
   },
   name: {
-    fontSize: 22,
+    fontSize: 25,
     margin: '0 0 20px 0',
     color: '#78350f',
   },
@@ -544,7 +544,7 @@ const styles = {
     borderRadius: 8,
   },
   text: {
-    fontSize: 15,
+    fontSize: 18,
     color: '#374151',
     margin: '0 0 16px 0',
   },
@@ -555,7 +555,7 @@ const styles = {
   },
   activityCard: {
     padding: '18px 20px',
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: 600,
     color: '#92400e',
     backgroundColor: '#fff',
@@ -585,7 +585,7 @@ const styles = {
   emptyChat: {
     margin: 'auto',
     color: '#9ca3af',
-    fontSize: 14,
+    fontSize: 17,
   },
   messageRow: {
     display: 'flex',
@@ -595,7 +595,7 @@ const styles = {
     maxWidth: '80%',
     padding: '12px 16px',
     borderRadius: 14,
-    fontSize: 16,
+    fontSize: 19,
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
   },
@@ -610,14 +610,14 @@ const styles = {
     borderBottomLeftRadius: 2,
   },
   typingIndicator: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#6b7280',
     fontStyle: 'italic',
     padding: '4px 8px',
   },
   retryButton: {
     padding: '6px 12px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#a94442',
     backgroundColor: '#fff',
@@ -636,7 +636,7 @@ const styles = {
   textInput: {
     flex: '1 1 200px',
     padding: '10px 12px',
-    fontSize: 15,
+    fontSize: 18,
     border: '1px solid #ccc',
     borderRadius: 4,
     resize: 'none',
@@ -644,7 +644,7 @@ const styles = {
   },
   micButton: {
     padding: '10px 14px',
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: 600,
     color: '#374151',
     backgroundColor: '#fff',
@@ -656,11 +656,11 @@ const styles = {
     color: '#fff',
     backgroundColor: '#dc2626',
     borderColor: '#dc2626',
-    fontSize: 13,
+    fontSize: 16,
   },
   primaryButton: {
     padding: '10px 16px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#fff',
     backgroundColor: '#d97706',
@@ -670,7 +670,7 @@ const styles = {
   },
   secondaryButton: {
     padding: '10px 16px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#b45309',
     backgroundColor: '#fff',
@@ -684,25 +684,25 @@ const styles = {
     backgroundColor: '#fffbeb',
   },
   debriefTitle: {
-    fontSize: 18,
+    fontSize: 21,
     margin: '0 0 8px 0',
     color: '#78350f',
   },
   debriefText: {
-    fontSize: 15,
+    fontSize: 18,
     color: '#374151',
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
     marginBottom: 16,
   },
   analysisStatus: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#6b7280',
     fontStyle: 'italic',
     margin: '0 0 16px 0',
   },
   analysisError: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#a94442',
     margin: '0 0 16px 0',
   },

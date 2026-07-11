@@ -44,11 +44,20 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
     // Returns a promise that resolves when the audio finishes, so callers
     // can `await mascotRef.current.say(text)` if they want to wait (e.g.
     // disable input while the character is talking).
-    async say(text) {
+    //
+    // If `onReveal` is passed, it's called repeatedly with a growing prefix
+    // of `text` timed to the audio, so a caller can render the reply
+    // progressively (like a chat stream) instead of popping in all at once.
+    // The TTS API doesn't return word timings, so this estimates progress
+    // from audio.currentTime / audio.duration (falling back to an average
+    // speech-rate estimate until the browser reports a real duration), and
+    // only reveals up through the last fully-elapsed word so the text never
+    // gets cut mid-word.
+    async say(text, { onReveal } = {}) {
       const {
         data: { session },
       } = await supabase.auth.getSession();
- 
+
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: {
@@ -59,17 +68,51 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
       });
       if (!res.ok) {
         console.error("TTS request failed:", await res.text());
+        onReveal?.(text);
         return;
       }
- 
+
       const buf = await res.arrayBuffer();
       const audio = new Audio(URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" })));
- 
+
       if (talk) talk.value = true;
- 
+
+      const wordBoundaries = [];
+      let consumed = 0;
+      for (const token of text.match(/\S+|\s+/g) || []) {
+        consumed += token.length;
+        wordBoundaries.push(consumed);
+      }
+      const FALLBACK_CHARS_PER_SECOND = 15; // ~150-180wpm average speech rate
+
+      let rafId = null;
+      const revealTick = () => {
+        const duration =
+          Number.isFinite(audio.duration) && audio.duration > 0
+            ? audio.duration
+            : text.length / FALLBACK_CHARS_PER_SECOND;
+        const targetChars = Math.min(audio.currentTime / duration, 1) * text.length;
+
+        let shownLength = 0;
+        for (const boundary of wordBoundaries) {
+          if (boundary > targetChars) break;
+          shownLength = boundary;
+        }
+        onReveal(text.slice(0, shownLength));
+
+        if (!audio.paused && !audio.ended) {
+          rafId = requestAnimationFrame(revealTick);
+        }
+      };
+
       return new Promise((resolve) => {
+        audio.onplay = () => {
+          if (onReveal) rafId = requestAnimationFrame(revealTick);
+        };
         audio.onended = () => {
           if (talk) talk.value = false;
+          if (rafId) cancelAnimationFrame(rafId);
+          onReveal?.(text);
           resolve();
         };
         audio.play();

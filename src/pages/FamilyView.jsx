@@ -196,7 +196,7 @@ const styles = {
     borderBottom: '2px solid #fde68a',
   },
   heroTitle: {
-    fontSize: 26,
+    fontSize: 29,
     fontWeight: 700,
     color: '#92400e',
     margin: '0 0 16px 0',
@@ -204,7 +204,7 @@ const styles = {
   },
   practiceButton: {
     padding: '12px 20px',
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 700,
     color: '#fff',
     backgroundColor: '#d97706',
@@ -216,7 +216,7 @@ const styles = {
     marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 700,
     color: '#78350f',
     margin: '0 0 10px 0',
@@ -224,14 +224,14 @@ const styles = {
     letterSpacing: '0.06em',
   },
   goalsText: {
-    fontSize: 15,
+    fontSize: 18,
     color: '#374151',
     lineHeight: 1.7,
     margin: 0,
     whiteSpace: 'pre-wrap',
   },
   emptyMessage: {
-    fontSize: 15,
+    fontSize: 18,
     color: '#6b7280',
     fontStyle: 'italic',
     margin: 0,
@@ -248,13 +248,13 @@ const styles = {
     borderRadius: 8,
   },
   sessionDate: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 700,
     color: '#92400e',
     marginBottom: 10,
   },
   sessionField: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     lineHeight: 1.6,
     marginTop: 6,

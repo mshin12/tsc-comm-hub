@@ -54,6 +54,8 @@ export default function Session() {
   const [lastFailedTurn, setLastFailedTurn] = useState(null);
   const [analyzingSession, setAnalyzingSession] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
+  const [revealingMessageId, setRevealingMessageId] = useState(null);
+  const [revealedText, setRevealedText] = useState('');
  
   // Data to hand off to the session log form once the session completes
   const [sessionId, setSessionId] = useState(null);
@@ -64,6 +66,7 @@ export default function Session() {
   const sessionStartTimeRef = useRef(null);
   const analysisPromiseRef = useRef(null);
   const mascotRef = useRef(null);
+  const messageIdCounterRef = useRef(0);
  
   // Fetch the individual's profile, then the matching prompts for their tier
   useEffect(() => {
@@ -138,12 +141,14 @@ export default function Session() {
     };
   }, [authLoading, user, role, individualId]);
  
-  // Auto-scroll to the latest message whenever the conversation updates
+  // Auto-scroll to the latest message whenever the conversation updates —
+  // also fires as revealedText grows, so the view keeps up while a reply
+  // streams in.
   useEffect(() => {
     if (messageListRef.current) {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, revealedText]);
 
   const { isListening, supported: micSupported, toggleListening } = useVoiceInput(
     (transcript) => setInputText((prev) => (prev ? prev + ' ' : '') + transcript)
@@ -320,6 +325,7 @@ export default function Session() {
       }
 
       const assistantMessage = {
+        id: messageIdCounterRef.current++,
         role: 'assistant',
         content: data.text,
         truncated: !!data.truncated,
@@ -330,8 +336,21 @@ export default function Session() {
 
       // Roleplay turns only — the post-END SESSION debrief line is a
       // clinical wrap-up, not something the character should say aloud.
-      if (!isEndSession) {
-        mascotRef.current?.say(assistantMessage.content);
+      // While the mascot is available, reveal the reply progressively in
+      // sync with the audio instead of popping the whole message in at
+      // once; if there's no mascot to drive the timing, just show it all.
+      const sayPromise = !isEndSession
+        ? mascotRef.current?.say(assistantMessage.content, { onReveal: setRevealedText })
+        : null;
+
+      if (sayPromise) {
+        setRevealedText('');
+        setRevealingMessageId(assistantMessage.id);
+        sayPromise.finally(() => {
+          setRevealingMessageId((current) =>
+            current === assistantMessage.id ? null : current
+          );
+        });
       }
 
       if (activeSessionId) {
@@ -509,32 +528,37 @@ export default function Session() {
                 Waiting for the session to begin...
               </div>
             )}
-            {messages.filter((m) => !m.hidden).map((message, index) => (
-              <div
-                key={index}
-                style={{
-                  ...styles.messageRow,
-                  justifyContent:
-                    message.role === 'user' ? 'flex-end' : 'flex-start',
-                }}
-              >
+            {messages.filter((m) => !m.hidden).map((message, index) => {
+              const isRevealing = message.id === revealingMessageId;
+              const displayContent = isRevealing ? revealedText : message.content;
+              return (
                 <div
+                  key={message.id ?? index}
                   style={{
-                    ...styles.messageBubble,
-                    ...(message.role === 'user'
-                      ? styles.userBubble
-                      : styles.assistantBubble),
+                    ...styles.messageRow,
+                    justifyContent:
+                      message.role === 'user' ? 'flex-end' : 'flex-start',
                   }}
                 >
-                  {message.content}
-                  {message.truncated && (
-                    <div style={styles.truncatedNote}>
-                      This response may have been cut short.
-                    </div>
-                  )}
+                  <div
+                    style={{
+                      ...styles.messageBubble,
+                      ...(message.role === 'user'
+                        ? styles.userBubble
+                        : styles.assistantBubble),
+                    }}
+                  >
+                    {displayContent}
+                    {isRevealing && <span style={styles.streamingCursor} />}
+                    {message.truncated && !isRevealing && (
+                      <div style={styles.truncatedNote}>
+                        This response may have been cut short.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
  
             {isSending && (
               <div style={styles.messageRow}>
@@ -641,6 +665,9 @@ export default function Session() {
         @keyframes session-spin {
           to { transform: rotate(360deg); }
         }
+        @keyframes session-cursor-blink {
+          50% { opacity: 0; }
+        }
       `}</style>
     </div>
   );
@@ -681,7 +708,7 @@ const styles = {
   backButton: {
     padding: '4px 0',
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 16,
     color: '#2563eb',
     background: 'none',
     border: 'none',
@@ -694,11 +721,11 @@ const styles = {
     gap: 12,
   },
   name: {
-    fontSize: 24,
+    fontSize: 27,
     margin: 0,
   },
   badge: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 600,
     padding: '2px 10px',
     borderRadius: 999,
@@ -710,21 +737,21 @@ const styles = {
     borderRadius: 8,
   },
   text: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     margin: 0,
   },
   label: {
     display: 'block',
     marginBottom: 6,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#333',
   },
   select: {
     width: '100%',
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 17,
     border: '1px solid #ccc',
     borderRadius: 4,
     marginBottom: 16,
@@ -732,7 +759,7 @@ const styles = {
   },
   primaryButton: {
     padding: '10px 16px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#fff',
     backgroundColor: '#2563eb',
@@ -767,7 +794,16 @@ const styles = {
   emptyChat: {
     margin: 'auto',
     color: '#9ca3af',
-    fontSize: 14,
+    fontSize: 17,
+  },
+  streamingCursor: {
+    display: 'inline-block',
+    width: 8,
+    height: 16,
+    marginLeft: 2,
+    verticalAlign: 'text-bottom',
+    backgroundColor: '#111827',
+    animation: 'session-cursor-blink 0.9s step-start infinite',
   },
   messageRow: {
     display: 'flex',
@@ -777,7 +813,7 @@ const styles = {
     maxWidth: '75%',
     padding: '10px 14px',
     borderRadius: 12,
-    fontSize: 14,
+    fontSize: 17,
     lineHeight: 1.4,
     whiteSpace: 'pre-wrap',
   },
@@ -792,20 +828,20 @@ const styles = {
     borderBottomLeftRadius: 2,
   },
   typingIndicator: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#6b7280',
     fontStyle: 'italic',
     padding: '4px 8px',
   },
   truncatedNote: {
-    fontSize: 12,
+    fontSize: 15,
     fontStyle: 'italic',
     color: '#9ca3af',
     marginTop: 4,
   },
   retryButton: {
     padding: '6px 12px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#a94442',
     backgroundColor: '#fff',
@@ -816,7 +852,7 @@ const styles = {
   },
   secondaryButton: {
     padding: '10px 16px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#2563eb',
     backgroundColor: '#fff',
@@ -833,7 +869,7 @@ const styles = {
   textInput: {
     flex: 1,
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 17,
     border: '1px solid #ccc',
     borderRadius: 4,
     resize: 'none',
@@ -841,7 +877,7 @@ const styles = {
   },
   micButton: {
     padding: '10px 14px',
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: 600,
     color: '#374151',
     backgroundColor: '#fff',
@@ -853,7 +889,7 @@ const styles = {
     color: '#fff',
     backgroundColor: '#dc2626',
     borderColor: '#dc2626',
-    fontSize: 13,
+    fontSize: 16,
   },
   debriefPanel: {
     padding: 20,
@@ -861,24 +897,24 @@ const styles = {
     backgroundColor: '#f9fafb',
   },
   debriefTitle: {
-    fontSize: 16,
+    fontSize: 19,
     margin: '0 0 8px 0',
   },
   debriefText: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
     marginBottom: 16,
   },
   analysisStatus: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#6b7280',
     fontStyle: 'italic',
     margin: '0 0 16px 0',
   },
   analysisError: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#a94442',
     margin: '0 0 16px 0',
   },

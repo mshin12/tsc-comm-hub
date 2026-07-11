@@ -417,7 +417,7 @@ const styles = {
   backButton: {
     padding: '4px 0',
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 16,
     color: '#2563eb',
     background: 'none',
     border: 'none',
@@ -425,11 +425,11 @@ const styles = {
     display: 'block',
   },
   heading: {
-    fontSize: 22,
+    fontSize: 25,
     margin: '0 0 4px 0',
   },
   subheading: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#6b7280',
     margin: '0 0 24px 0',
   },
@@ -456,7 +456,7 @@ const styles = {
   },
   transcriptSummary: {
     cursor: 'pointer',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#374151',
   },
@@ -469,7 +469,7 @@ const styles = {
     gap: 8,
   },
   transcriptRow: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#374151',
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
@@ -497,7 +497,7 @@ const styles = {
   aiNotice: {
     margin: '0 0 24px 0',
     padding: '10px 14px',
-    fontSize: 13,
+    fontSize: 16,
     color: '#374151',
     backgroundColor: '#eff6ff',
     border: '1px solid #bfdbfe',
@@ -505,7 +505,7 @@ const styles = {
     lineHeight: 1.5,
   },
   aiTag: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: 600,
     color: '#1e40af',
     backgroundColor: '#dbeafe',
@@ -522,7 +522,7 @@ const styles = {
   },
   secondaryButton: {
     padding: '8px 14px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#2563eb',
     backgroundColor: '#fff',
@@ -531,28 +531,28 @@ const styles = {
     cursor: 'pointer',
   },
   generateError: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#a94442',
   },
   field: {
     marginBottom: 20,
   },
   hint: {
-    fontSize: 12,
+    fontSize: 15,
     color: '#6b7280',
     margin: '0 0 6px 0',
   },
   label: {
     display: 'block',
     marginBottom: 6,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#111827',
   },
   textarea: {
     width: '100%',
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 17,
     border: '1px solid #ccc',
     borderRadius: 4,
     resize: 'vertical',
@@ -562,13 +562,13 @@ const styles = {
   numberInput: {
     width: 120,
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 17,
     border: '1px solid #ccc',
     borderRadius: 4,
   },
   primaryButton: {
     padding: '10px 20px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#fff',
     backgroundColor: '#2563eb',

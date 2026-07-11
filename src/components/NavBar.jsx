@@ -33,14 +33,14 @@ const styles = {
     fontFamily: 'sans-serif',
   },
   title: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 700,
     color: '#fff',
     letterSpacing: '0.03em',
   },
   signOutButton: {
     padding: '6px 14px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#111827',
     backgroundColor: '#fff',

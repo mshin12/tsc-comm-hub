@@ -270,7 +270,7 @@ const styles = {
   backButton: {
     padding: '4px 0',
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 16,
     color: '#2563eb',
     background: 'none',
     border: 'none',
@@ -278,11 +278,11 @@ const styles = {
     display: 'block',
   },
   name: {
-    fontSize: 24,
+    fontSize: 27,
     margin: '0 0 8px 0',
   },
   badge: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 600,
     padding: '2px 10px',
     borderRadius: 999,
@@ -293,7 +293,7 @@ const styles = {
   },
   primaryButton: {
     padding: '8px 16px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#fff',
     backgroundColor: '#2563eb',
@@ -303,7 +303,7 @@ const styles = {
   },
   secondaryButton: {
     padding: '8px 16px',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#2563eb',
     backgroundColor: '#fff',
@@ -315,13 +315,13 @@ const styles = {
     marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 600,
     marginBottom: 6,
     color: '#111827',
   },
   text: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     lineHeight: 1.5,
     margin: 0,
@@ -342,20 +342,20 @@ const styles = {
     borderRadius: 6,
   },
   sessionDate: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#6b7280',
     marginBottom: 4,
   },
   sessionField: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     marginTop: 2,
   },
   finishLogButton: {
     marginTop: 6,
     padding: '4px 10px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#a94442',
     backgroundColor: '#fff',
@@ -366,7 +366,7 @@ const styles = {
   viewLogButton: {
     marginTop: 6,
     padding: '4px 10px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#2563eb',
     backgroundColor: '#fff',

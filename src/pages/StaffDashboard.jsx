@@ -191,7 +191,7 @@ const styles = {
     fontFamily: 'sans-serif',
   },
   heading: {
-    fontSize: 22,
+    fontSize: 25,
     marginBottom: 20,
   },
   centered: {
@@ -220,7 +220,7 @@ const styles = {
     padding: 40,
     textAlign: 'center',
     color: '#6b7280',
-    fontSize: 16,
+    fontSize: 19,
   },
   grid: {
     display: 'grid',
@@ -247,25 +247,25 @@ const styles = {
     marginBottom: 10,
   },
   fullName: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: 600,
   },
   badge: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 600,
     padding: '2px 8px',
     borderRadius: 999,
     whiteSpace: 'nowrap',
   },
   goals: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#4b5563',
     margin: 0,
     lineHeight: 1.4,
   },
   lastSession: {
     marginTop: 10,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 600,
     color: '#6b7280',
   },

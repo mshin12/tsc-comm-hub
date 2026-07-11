@@ -209,11 +209,11 @@ const styles = {
   title: {
     marginTop: 0,
     marginBottom: 20,
-    fontSize: 22,
+    fontSize: 25,
     textAlign: 'center',
   },
   text: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     lineHeight: 1.5,
     margin: 0,
@@ -224,14 +224,14 @@ const styles = {
   label: {
     display: 'block',
     marginBottom: 4,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 600,
     color: '#333',
   },
   input: {
     width: '100%',
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 17,
     border: '1px solid #ccc',
     borderRadius: 4,
     boxSizing: 'border-box',
@@ -239,7 +239,7 @@ const styles = {
   error: {
     marginBottom: 16,
     padding: '8px 12px',
-    fontSize: 14,
+    fontSize: 17,
     color: '#a94442',
     backgroundColor: '#f2dede',
     border: '1px solid #ebccd1',
@@ -247,7 +247,7 @@ const styles = {
   },
   success: {
     padding: '10px 14px',
-    fontSize: 14,
+    fontSize: 17,
     color: '#2d6a4f',
     backgroundColor: '#d8f3dc',
     border: '1px solid #b7e4c7',
@@ -257,7 +257,7 @@ const styles = {
   button: {
     width: '100%',
     padding: '10px 12px',
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 600,
     color: '#fff',
     backgroundColor: '#2563eb',

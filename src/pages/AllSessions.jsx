@@ -190,7 +190,7 @@ const styles = {
   backButton: {
     padding: '4px 0',
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 16,
     color: '#2563eb',
     background: 'none',
     border: 'none',
@@ -198,11 +198,11 @@ const styles = {
     display: 'block',
   },
   heading: {
-    fontSize: 22,
+    fontSize: 25,
     margin: 0,
   },
   text: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
   },
   sessionList: {
@@ -220,20 +220,20 @@ const styles = {
     borderRadius: 6,
   },
   sessionDate: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#6b7280',
     marginBottom: 4,
   },
   sessionField: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#374151',
     marginTop: 2,
   },
   finishLogButton: {
     marginTop: 6,
     padding: '4px 10px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#a94442',
     backgroundColor: '#fff',
@@ -244,7 +244,7 @@ const styles = {
   viewLogButton: {
     marginTop: 6,
     padding: '4px 10px',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 600,
     color: '#2563eb',
     backgroundColor: '#fff',
