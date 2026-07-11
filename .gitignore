@@ -25,3 +25,5 @@ dist-ssr
 .env
 CLAUDE.md
 .vercel
+fable_audit_prompt.md
+mascot-feature-handoff.md

@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
 import { logAction } from '../lib/auditLog';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import Mascot from '../components/Mascot';
  
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -62,6 +63,7 @@ export default function Session() {
   const messageListRef = useRef(null);
   const sessionStartTimeRef = useRef(null);
   const analysisPromiseRef = useRef(null);
+  const mascotRef = useRef(null);
  
   // Fetch the individual's profile, then the matching prompts for their tier
   useEffect(() => {
@@ -326,6 +328,12 @@ export default function Session() {
       setMessages(finalMessages);
       setLastFailedTurn(null);
 
+      // Roleplay turns only — the post-END SESSION debrief line is a
+      // clinical wrap-up, not something the character should say aloud.
+      if (!isEndSession) {
+        mascotRef.current?.say(assistantMessage.content);
+      }
+
       if (activeSessionId) {
         const { error: transcriptError } = await supabase
           .from('sessions')
@@ -492,6 +500,9 @@ export default function Session() {
       {/* Conversation section: active once a session has been started */}
       {sessionActive && (
         <div style={styles.chatPanel}>
+          <div style={styles.mascotRow}>
+            <Mascot ref={mascotRef} />
+          </div>
           <div style={styles.messageList} ref={messageListRef}>
             {messages.filter((m) => !m.hidden).length === 0 && !isSending && (
               <div style={styles.emptyChat}>
@@ -737,6 +748,12 @@ const styles = {
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#fff',
+  },
+  mascotRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '12px 0 0',
+    backgroundColor: '#f9fafb',
   },
   messageList: {
     height: 360,

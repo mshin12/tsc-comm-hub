@@ -11,17 +11,18 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
+    "@rive-app/react-canvas": "^4.29.5",
     "@supabase/supabase-js": "^2.108.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
-    "vercel": "^54.20.0"
+    "vercel": "^54.17.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vercel/node": "^5.8.22",
+    "@vercel/node": "^4.0.0",
     "@vitejs/plugin-react": "^6.0.2",
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -31,6 +32,7 @@
   },
   "allowScripts": {
     "fsevents@2.3.3": true,
-    "esbuild@0.27.0": true
+    "esbuild@0.27.0": true,
+    "esbuild@0.14.47": true
   }
 }
