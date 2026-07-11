@@ -19,6 +19,17 @@ function isUnfinished(session) {
   );
 }
 
+// Personal-info fields admins can edit in place. Kept in one array so the
+// read view, edit form, and save payload all stay driven by the same list
+// instead of five near-identical blocks each.
+const EDITABLE_FIELDS = [
+  { key: 'goals', label: 'Goals', placeholder: 'No goals recorded.' },
+  { key: 'interests', label: 'Interests', placeholder: 'No interests recorded.' },
+  { key: 'vocabulary_notes', label: 'Vocabulary Notes', placeholder: 'No vocabulary notes recorded.' },
+  { key: 'triggers_notes', label: 'Triggers', placeholder: 'No triggers recorded.' },
+  { key: 'aac_system', label: 'AAC System', placeholder: 'No AAC system recorded.' },
+];
+
 function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -39,6 +50,11 @@ export default function IndividualProfile() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
  
   useEffect(() => {
     if (authLoading) return;
@@ -96,7 +112,55 @@ export default function IndividualProfile() {
       isMounted = false;
     };
   }, [authLoading, user, role, id]);
- 
+
+  const handleStartEdit = () => {
+    const initialForm = {};
+    for (const field of EDITABLE_FIELDS) {
+      initialForm[field.key] = individual[field.key] || '';
+    }
+    setEditForm(initialForm);
+    setSaveError('');
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditForm(null);
+    setSaveError('');
+  };
+
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    setSaveError('');
+
+    const payload = {};
+    for (const field of EDITABLE_FIELDS) {
+      payload[field.key] = editForm[field.key].trim() || null;
+    }
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('individuals')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    setSaving(false);
+
+    if (updateError) {
+      setSaveError(
+        updateError.code === 'PGRST116'
+          ? 'You do not have permission to edit this profile.'
+          : updateError.message || 'Could not save changes. Please try again.'
+      );
+      return;
+    }
+
+    setIndividual(updatedRow);
+    setIsEditing(false);
+    setEditForm(null);
+  };
+
   if (authLoading || loading) {
     return (
       <div style={styles.centered}>
@@ -151,44 +215,61 @@ export default function IndividualProfile() {
           >
             View All Sessions
           </button>
+          {role === 'admin' && !isEditing && (
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={handleStartEdit}
+            >
+              Edit Info
+            </button>
+          )}
         </div>
       </div>
- 
+
       {error && <div style={styles.errorBanner}>{error}</div>}
- 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Goals</h2>
-        <p style={styles.text}>{individual.goals || 'No goals recorded.'}</p>
-      </div>
- 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Interests</h2>
-        <p style={styles.text}>
-          {individual.interests || 'No interests recorded.'}
-        </p>
-      </div>
- 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Vocabulary Notes</h2>
-        <p style={styles.text}>
-          {individual.vocabulary_notes || 'No vocabulary notes recorded.'}
-        </p>
-      </div>
- 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Triggers</h2>
-        <p style={styles.text}>
-          {individual.triggers_notes || 'No triggers recorded.'}
-        </p>
-      </div>
- 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>AAC System</h2>
-        <p style={styles.text}>
-          {individual.aac_system || 'No AAC system recorded.'}
-        </p>
-      </div>
- 
+      {saveError && <div style={styles.errorBanner}>{saveError}</div>}
+
+      {EDITABLE_FIELDS.map((field) => (
+        <div key={field.key} style={styles.section}>
+          <h2 style={styles.sectionTitle}>{field.label}</h2>
+          {isEditing ? (
+            <textarea
+              value={editForm[field.key]}
+              onChange={(e) =>
+                setEditForm((prev) => ({ ...prev, [field.key]: e.target.value }))
+              }
+              style={styles.textarea}
+              rows={3}
+              disabled={saving}
+            />
+          ) : (
+            <p style={styles.text}>{individual[field.key] || field.placeholder}</p>
+          )}
+        </div>
+      ))}
+
+      {isEditing && (
+        <div style={styles.editActions}>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={handleSaveEdit}
+            disabled={saving}
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={handleCancelEdit}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div style={styles.section}>
         <h2 style={styles.sectionTitle}>Recent Sessions</h2>
         {sessions.length === 0 ? (
@@ -326,6 +407,21 @@ const styles = {
     lineHeight: 1.5,
     margin: 0,
     whiteSpace: 'pre-wrap',
+  },
+  textarea: {
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: 17,
+    border: '1px solid #ccc',
+    borderRadius: 4,
+    resize: 'vertical',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+  },
+  editActions: {
+    display: 'flex',
+    gap: 8,
+    marginBottom: 24,
   },
   sessionList: {
     listStyle: 'none',
