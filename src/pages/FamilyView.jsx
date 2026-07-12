@@ -64,14 +64,14 @@ export default function FamilyView() {
         .select('id, session_date, scenario_used, family_summary')
         .eq('individual_id', individualData.id)
         .order('session_date', { ascending: false })
-        .limit(10);
+        .limit(5);
 
       if (!isMounted) return;
 
       if (sessionsError) {
         setError('Could not load session history.');
       } else {
-        setSessions((sessionsData || []).slice().reverse());
+        setSessions(sessionsData || []);
       }
 
       setLoading(false);
