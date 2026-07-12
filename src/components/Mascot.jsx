@@ -53,7 +53,7 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
     // speech-rate estimate until the browser reports a real duration), and
     // only reveals up through the last fully-elapsed word so the text never
     // gets cut mid-word.
-    async say(text, { onReveal } = {}) {
+    async say(text, { onReveal, sessionId } = {}) {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -64,7 +64,7 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, sessionId }),
       });
       if (!res.ok) {
         console.error("TTS request failed:", await res.text());

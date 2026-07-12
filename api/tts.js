@@ -9,41 +9,46 @@
 // chat.js does something different — e.g. an extra role check — copy that
 // logic here too so the two routes can't drift apart on security.
  
-import { createClient } from "@supabase/supabase-js";
- 
-// Reuses whatever Supabase project env vars the client already uses to
-// connect (lib/supabaseClient.js). If that file reads different var names
-// than these, match them here — don't add a second set of Supabase env vars.
-const supabaseAdmin = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY
-);
- 
+import { authenticate, assertSessionAccess } from "./_lib/supabaseAuth.js";
+
+// A single AI turn is capped well under this at the chat.js layer
+// (max_tokens: 2048, ~6000 chars per message there) — this just keeps an
+// authenticated-but-malicious caller from turning this route into a way to
+// run arbitrary, unrelated text through paid OpenAI TTS.
+const MAX_TEXT_LENGTH = 6000;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
- 
+
   // --- Auth ---
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or invalid auth token" });
   }
   const token = authHeader.split(" ")[1];
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAdmin.auth.getUser(token);
-  if (authError || !user) {
+  const auth = await authenticate(token);
+  if (!auth) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
- 
+
   // --- Validate input ---
-  const { text } = req.body || {};
+  const { sessionId, text } = req.body || {};
   if (!text || typeof text !== "string") {
     return res.status(400).json({ error: "text required" });
   }
- 
+  if (text.length > MAX_TEXT_LENGTH) {
+    return res.status(400).json({ error: "text is too long" });
+  }
+
+  // Ties this speech request to a real sessions row the caller can already
+  // read under RLS — same ownership check as chat.js/debrief.js, so this
+  // can't be used as an unrelated, unmetered text-to-speech proxy.
+  if (!(await assertSessionAccess(auth.userClient, sessionId))) {
+    return res.status(403).json({ error: "You do not have access to this session." });
+  }
+
   try {
     const openaiRes = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",

@@ -1,10 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { authenticate, assertSessionAccess } from './_lib/supabaseAuth.js';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY
-);
+// Bounds on a single request — cheap to check, and the only thing standing
+// between an authorized-but-malicious caller and an unbounded Anthropic bill
+// (max_tokens below only caps the *response*, not what we pay for on input).
+const MAX_MESSAGES = 200;
+const MAX_MESSAGE_LENGTH = 6000;
+const MAX_SYSTEM_PROMPT_LENGTH = 20000;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -19,22 +21,43 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Missing authorization token.' });
   }
 
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  const auth = await authenticate(token);
 
-  if (authError || !authData?.user) {
+  if (!auth) {
     return res.status(401).json({ error: 'Invalid or expired session.' });
   }
 
-  const { messages, systemPrompt } = req.body || {};
- 
+  const { sessionId, messages, systemPrompt } = req.body || {};
+
+  // Every chat turn belongs to a real sessions row. Requiring it here — and
+  // checking it through a client scoped to the caller's own JWT — means
+  // authorization is enforced by the same RLS policies that already govern
+  // who can read a session, instead of this endpoint being reachable by any
+  // authenticated account with any content, unrelated to a real session.
+  if (!(await assertSessionAccess(auth.userClient, sessionId))) {
+    return res.status(403).json({ error: 'You do not have access to this session.' });
+  }
+
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: '"messages" must be a non-empty array.' });
   }
- 
+
+  if (messages.length > MAX_MESSAGES) {
+    return res.status(400).json({ error: 'Too many messages in this conversation.' });
+  }
+
   if (typeof systemPrompt !== 'string') {
     return res.status(400).json({ error: '"systemPrompt" must be a string.' });
   }
- 
+
+  if (systemPrompt.length > MAX_SYSTEM_PROMPT_LENGTH) {
+    return res.status(400).json({ error: '"systemPrompt" is too long.' });
+  }
+
+  if (messages.some((m) => typeof m?.content !== 'string' || m.content.length > MAX_MESSAGE_LENGTH)) {
+    return res.status(400).json({ error: 'A message is missing content or is too long.' });
+  }
+
   let anthropic;
   try {
     anthropic = new Anthropic();

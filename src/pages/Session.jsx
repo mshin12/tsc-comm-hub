@@ -244,6 +244,7 @@ export default function Session() {
             : {}),
         },
         body: JSON.stringify({
+          sessionId: sessionIdToUse,
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
             .map(({ role, content }) => ({ role, content })),
@@ -306,6 +307,7 @@ export default function Session() {
             : {}),
         },
         body: JSON.stringify({
+          sessionId: activeSessionId,
           messages: updatedMessages.map(({ role, content }) => ({ role, content })),
           systemPrompt: activeSystemPrompt,
         }),
@@ -340,7 +342,10 @@ export default function Session() {
       // sync with the audio instead of popping the whole message in at
       // once; if there's no mascot to drive the timing, just show it all.
       const sayPromise = !isEndSession
-        ? mascotRef.current?.say(assistantMessage.content, { onReveal: setRevealedText })
+        ? mascotRef.current?.say(assistantMessage.content, {
+            onReveal: setRevealedText,
+            sessionId: activeSessionId,
+          })
         : null;
 
       if (sayPromise) {

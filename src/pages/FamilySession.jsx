@@ -138,6 +138,7 @@ export default function FamilySession() {
             : {}),
         },
         body: JSON.stringify({
+          sessionId: sessionIdToUse,
           mode: 'family_summary_only',
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
@@ -230,6 +231,7 @@ export default function FamilySession() {
             : {}),
         },
         body: JSON.stringify({
+          sessionId: activeSessionId,
           messages: updatedMessages.map(({ role, content }) => ({ role, content })),
           systemPrompt: activeSystemPrompt,
         }),

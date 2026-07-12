@@ -138,6 +138,7 @@ export default function SessionLog() {
             : {}),
         },
         body: JSON.stringify({
+          sessionId,
           transcript: transcript.map(({ role, content }) => ({ role, content })),
           individual: individual || {},
         }),

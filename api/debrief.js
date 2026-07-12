@@ -1,10 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { authenticate, assertSessionAccess } from './_lib/supabaseAuth.js';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY
-);
+const MAX_TRANSCRIPT_MESSAGES = 200;
+const MAX_MESSAGE_LENGTH = 6000;
 
 // Forcing a tool call (rather than asking for JSON in prose) guarantees a
 // parseable, complete result instead of relying on the model to format its
@@ -94,16 +92,32 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Missing authorization token.' });
   }
 
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  const auth = await authenticate(token);
 
-  if (authError || !authData?.user) {
+  if (!auth) {
     return res.status(401).json({ error: 'Invalid or expired session.' });
   }
 
-  const { transcript, individual, mode } = req.body || {};
+  const { sessionId, transcript, individual, mode } = req.body || {};
+
+  // Ties this analysis to a real sessions row the caller can already read
+  // under RLS, so the endpoint can't be used as an unrestricted transcript
+  // analyzer by any authenticated account (see api/chat.js for the same
+  // pattern and the reasoning behind it).
+  if (!(await assertSessionAccess(auth.userClient, sessionId))) {
+    return res.status(403).json({ error: 'You do not have access to this session.' });
+  }
 
   if (!Array.isArray(transcript) || transcript.length === 0) {
     return res.status(400).json({ error: '"transcript" must be a non-empty array.' });
+  }
+
+  if (transcript.length > MAX_TRANSCRIPT_MESSAGES) {
+    return res.status(400).json({ error: 'This transcript is too long to analyze.' });
+  }
+
+  if (transcript.some((m) => typeof m?.content !== 'string' || m.content.length > MAX_MESSAGE_LENGTH)) {
+    return res.status(400).json({ error: 'A transcript message is missing content or is too long.' });
   }
 
   const familySummaryOnly = mode === 'family_summary_only';
