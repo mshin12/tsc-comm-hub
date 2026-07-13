@@ -1,10 +1,17 @@
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { logAction } from '../lib/auditLog';
 
 export default function NavBar() {
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
+    // Unlike every other logAction() call in the app, this one is awaited
+    // rather than fire-and-forget: logAction() identifies the actor via its
+    // own supabase.auth.getUser() call, and signOut() clears that session.
+    // Awaiting first guarantees the log captures who signed out before
+    // there's any session left to race against.
+    await logAction('user_signed_out');
     await supabase.auth.signOut();
     navigate('/', { replace: true });
   };

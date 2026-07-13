@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
+import { logAction } from '../lib/auditLog';
  
 const TIER_COLORS = {
   1: { backgroundColor: '#dbeafe', color: '#1e40af' },
@@ -162,6 +163,14 @@ export default function IndividualProfile() {
       payload[field.key] = toSavedValue(field, editForm[field.key]);
     }
 
+    // Field names only — not before/after values. These are PII/PHI-adjacent
+    // fields; the audit trail should record who touched what and when
+    // without duplicating the sensitive content itself into a second table
+    // with its own, separate access controls.
+    const changedFields = EDITABLE_FIELDS
+      .filter((field) => (individual[field.key] ?? null) !== payload[field.key])
+      .map((field) => field.key);
+
     const { data: updatedRow, error: updateError } = await supabase
       .from('individuals')
       .update(payload)
@@ -178,6 +187,14 @@ export default function IndividualProfile() {
           : updateError.message || 'Could not save changes. Please try again.'
       );
       return;
+    }
+
+    if (changedFields.length > 0) {
+      logAction('individual_edited', {
+        tableName: 'individuals',
+        recordId: id,
+        metadata: { fields_changed: changedFields },
+      });
     }
 
     setIndividual(updatedRow);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { logAction } from '../lib/auditLog';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -96,6 +97,14 @@ export default function Login() {
       }
  
       // 3. Redirect based on role
+      if (profile.role === 'staff' || profile.role === 'admin' || profile.role === 'family') {
+        logAction('user_signed_in', {
+          tableName: 'users',
+          recordId: user.id,
+          metadata: { role: profile.role },
+        });
+      }
+
       if (profile.role === 'staff' || profile.role === 'admin') {
         navigate('/dashboard');
       } else if (profile.role === 'family') {
