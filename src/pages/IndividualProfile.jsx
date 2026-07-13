@@ -28,7 +28,31 @@ const EDITABLE_FIELDS = [
   { key: 'vocabulary_notes', label: 'Vocabulary Notes', placeholder: 'No vocabulary notes recorded.' },
   { key: 'triggers_notes', label: 'Triggers', placeholder: 'No triggers recorded.' },
   { key: 'aac_system', label: 'AAC System', placeholder: 'No AAC system recorded.' },
+  // Independent of aac_system above (which stays free-text/descriptive):
+  // a plain three-state flag (Yes / No / Unspecified) that drives whether
+  // assemblePrompt.js injects AAC guidance into a session's system prompt.
+  // Unspecified (null) is the default and is NOT the same as "No".
+  { key: 'uses_aac', label: 'Uses AAC', placeholder: 'Unspecified', type: 'boolean' },
 ];
+
+// Boolean fields store true/false/null in the database, but a <select>
+// needs string option values — these convert between the two so the rest
+// of the form logic (handleStartEdit/handleSaveEdit) can treat every field
+// uniformly regardless of type.
+function toEditValue(field, individual) {
+  if (field.type === 'boolean') {
+    const value = individual[field.key];
+    return value === true ? 'yes' : value === false ? 'no' : 'unspecified';
+  }
+  return individual[field.key] || '';
+}
+
+function toSavedValue(field, editValue) {
+  if (field.type === 'boolean') {
+    return editValue === 'yes' ? true : editValue === 'no' ? false : null;
+  }
+  return editValue.trim() || null;
+}
 
 function formatDate(dateString) {
   if (!dateString) return '';
@@ -116,7 +140,7 @@ export default function IndividualProfile() {
   const handleStartEdit = () => {
     const initialForm = {};
     for (const field of EDITABLE_FIELDS) {
-      initialForm[field.key] = individual[field.key] || '';
+      initialForm[field.key] = toEditValue(field, individual);
     }
     setEditForm(initialForm);
     setSaveError('');
@@ -135,7 +159,7 @@ export default function IndividualProfile() {
 
     const payload = {};
     for (const field of EDITABLE_FIELDS) {
-      payload[field.key] = editForm[field.key].trim() || null;
+      payload[field.key] = toSavedValue(field, editForm[field.key]);
     }
 
     const { data: updatedRow, error: updateError } = await supabase
@@ -234,17 +258,40 @@ export default function IndividualProfile() {
         <div key={field.key} style={styles.section}>
           <h2 style={styles.sectionTitle}>{field.label}</h2>
           {isEditing ? (
-            <textarea
-              value={editForm[field.key]}
-              onChange={(e) =>
-                setEditForm((prev) => ({ ...prev, [field.key]: e.target.value }))
-              }
-              style={styles.textarea}
-              rows={3}
-              disabled={saving}
-            />
+            field.type === 'boolean' ? (
+              <select
+                value={editForm[field.key]}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, [field.key]: e.target.value }))
+                }
+                style={styles.select}
+                disabled={saving}
+              >
+                <option value="unspecified">Unspecified</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            ) : (
+              <textarea
+                value={editForm[field.key]}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, [field.key]: e.target.value }))
+                }
+                style={styles.textarea}
+                rows={3}
+                disabled={saving}
+              />
+            )
           ) : (
-            <p style={styles.text}>{individual[field.key] || field.placeholder}</p>
+            <p style={styles.text}>
+              {field.type === 'boolean'
+                ? individual[field.key] === true
+                  ? 'Yes'
+                  : individual[field.key] === false
+                  ? 'No'
+                  : field.placeholder
+                : individual[field.key] || field.placeholder}
+            </p>
           )}
         </div>
       ))}
@@ -415,6 +462,14 @@ const styles = {
     border: '1px solid #ccc',
     borderRadius: 4,
     resize: 'vertical',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+  },
+  select: {
+    padding: '10px 12px',
+    fontSize: 17,
+    border: '1px solid #ccc',
+    borderRadius: 4,
     fontFamily: 'inherit',
     boxSizing: 'border-box',
   },
