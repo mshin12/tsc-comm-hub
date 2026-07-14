@@ -106,16 +106,33 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
       };
 
       return new Promise((resolve) => {
-        audio.onplay = () => {
-          if (onReveal) rafId = requestAnimationFrame(revealTick);
-        };
-        audio.onended = () => {
+        // If the audio never plays for any reason — blocked by browser
+        // autoplay policy, a decode/network error, or (previously) a CSP
+        // media-src gap on blob: URLs — neither onplay nor onended ever
+        // fires. Without a fallback, the caller's promise hangs forever:
+        // revealingMessageId stays stuck and the reply's text never
+        // appears, even though the chat turn itself succeeded. Treat any
+        // playback failure as "show the full text immediately and move on"
+        // instead of blocking the conversation on audio that isn't coming.
+        const finishWithoutAudio = () => {
           if (talk) talk.value = false;
           if (rafId) cancelAnimationFrame(rafId);
           onReveal?.(text);
           resolve();
         };
-        audio.play();
+
+        audio.onplay = () => {
+          if (onReveal) rafId = requestAnimationFrame(revealTick);
+        };
+        audio.onended = finishWithoutAudio;
+        audio.onerror = () => {
+          console.error('Mascot audio playback failed:', audio.error);
+          finishWithoutAudio();
+        };
+        audio.play().catch((playError) => {
+          console.error('Mascot audio.play() rejected:', playError);
+          finishWithoutAudio();
+        });
       });
     },
   }));
