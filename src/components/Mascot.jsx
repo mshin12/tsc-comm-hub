@@ -26,8 +26,20 @@
  
 import { forwardRef, useImperativeHandle } from "react";
 import { useRive, useStateMachineInput } from "@rive-app/react-canvas";
+import { RuntimeLoader } from "@rive-app/canvas";
 import { supabase } from "../lib/supabaseClient";
- 
+
+// @rive-app/canvas defaults to fetching its WASM runtime from unpkg.com,
+// with a jsdelivr.net fallback — neither is same-origin, so the app's CSP
+// connect-src blocks both and the mascot never loads at all (confirmed via
+// a live CSP violation: the runtime fetch was silently blocked, so
+// useRive() never got a working instance to render). Point both at the
+// same .wasm files this package already ships, copied into public/ once
+// (see package.json) so everything stays same-origin and CSP doesn't need
+// to trust two extra third-party CDNs.
+RuntimeLoader.setWasmUrl("/rive.wasm");
+RuntimeLoader.setWasmFallbackUrl("/rive_fallback.wasm");
+
 const STATE_MACHINE = "State Machine 1"; // confirmed present in mascot.riv
 const TALK_INPUT = "Talk"; // confirmed bool via the Rive editor's state machine inspector
  

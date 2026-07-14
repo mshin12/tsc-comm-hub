@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
+    "@rive-app/canvas": "2.38.5",
     "@rive-app/react-canvas": "^4.29.5",
     "@supabase/supabase-js": "^2.108.2",
     "react": "^19.2.7",
