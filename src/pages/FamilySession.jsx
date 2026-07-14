@@ -45,13 +45,24 @@ export default function FamilySession() {
   const [analysisError, setAnalysisError] = useState('');
 
   const [sessionId, setSessionId] = useState(null);
+  const [interimTranscript, setInterimTranscript] = useState('');
 
   const messageListRef = useRef(null);
   const analysisPromiseRef = useRef(null);
 
-  const { isListening, supported: micSupported, toggleListening } = useVoiceInput(
-    (transcript) => setInputText((prev) => (prev ? prev + ' ' : '') + transcript)
-  );
+  const { isListening, supported: micSupported, toggleListening } = useVoiceInput({
+    onFinalResult: (transcript) =>
+      setInputText((prev) => (prev ? prev + ' ' : '') + transcript),
+    onInterimResult: setInterimTranscript,
+  });
+
+  // What the textarea actually displays while listening: the already-typed/
+  // committed text plus whatever's being recognized live right now. The
+  // interim portion is a preview only — it isn't merged into inputText
+  // itself until the recognizer settles on a final result for that phrase.
+  const displayedInputText = interimTranscript
+    ? inputText + (inputText ? ' ' : '') + interimTranscript
+    : inputText;
 
   useEffect(() => {
     if (authLoading) return;
@@ -428,10 +439,15 @@ export default function FamilySession() {
           {!sessionEnded ? (
             <div style={styles.inputRow}>
               <textarea
-                value={inputText}
+                value={displayedInputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={isSending}
+                // Disabled while listening — the live interim preview is
+                // replacing this value on every recognized word, and letting
+                // manual keystrokes land at the same time would fight with
+                // that and produce garbled text. Toggle the mic off to
+                // resume typing/editing.
+                disabled={isSending || isListening}
                 placeholder="Type here, or use the mic…"
                 style={styles.textInput}
                 rows={2}
@@ -454,7 +470,7 @@ export default function FamilySession() {
                 type="button"
                 style={styles.primaryButton}
                 onClick={handleSend}
-                disabled={isSending || !inputText.trim()}
+                disabled={isSending || isListening || !inputText.trim()}
               >
                 {isSending ? 'Sending...' : 'Send'}
               </button>
@@ -462,7 +478,7 @@ export default function FamilySession() {
                 type="button"
                 style={styles.secondaryButton}
                 onClick={handleFinishClick}
-                disabled={isSending}
+                disabled={isSending || isListening}
               >
                 I'm Done Practicing
               </button>

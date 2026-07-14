@@ -56,6 +56,7 @@ export default function Session() {
   const [analysisError, setAnalysisError] = useState('');
   const [revealingMessageId, setRevealingMessageId] = useState(null);
   const [revealedText, setRevealedText] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
  
   // Data to hand off to the session log form once the session completes
   const [sessionId, setSessionId] = useState(null);
@@ -150,9 +151,19 @@ export default function Session() {
     }
   }, [messages, revealedText]);
 
-  const { isListening, supported: micSupported, toggleListening } = useVoiceInput(
-    (transcript) => setInputText((prev) => (prev ? prev + ' ' : '') + transcript)
-  );
+  const { isListening, supported: micSupported, toggleListening } = useVoiceInput({
+    onFinalResult: (transcript) =>
+      setInputText((prev) => (prev ? prev + ' ' : '') + transcript),
+    onInterimResult: setInterimTranscript,
+  });
+
+  // What the textarea actually displays while listening: the already-typed/
+  // committed text plus whatever's being recognized live right now. The
+  // interim portion is a preview only — it isn't merged into inputText
+  // itself until the recognizer settles on a final result for that phrase.
+  const displayedInputText = interimTranscript
+    ? inputText + (inputText ? ' ' : '') + interimTranscript
+    : inputText;
 
   const handleStartSession = async () => {
     const selectedPrompt = prompts.find(
@@ -591,10 +602,15 @@ export default function Session() {
           {!sessionEnded ? (
             <div style={styles.inputRow}>
               <textarea
-                value={inputText}
+                value={displayedInputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={isSending}
+                // Disabled while listening — the live interim preview is
+                // replacing this value on every recognized word, and letting
+                // manual keystrokes land at the same time would fight with
+                // that and produce garbled text. Toggle the mic off to
+                // resume typing/editing.
+                disabled={isSending || isListening}
                 placeholder="Type a message..."
                 style={styles.textInput}
                 rows={2}
@@ -617,7 +633,7 @@ export default function Session() {
                 type="button"
                 style={styles.primaryButton}
                 onClick={handleSend}
-                disabled={isSending || !inputText.trim()}
+                disabled={isSending || isListening || !inputText.trim()}
               >
                 {isSending ? 'Sending...' : 'Send'}
               </button>
@@ -625,7 +641,7 @@ export default function Session() {
                 type="button"
                 style={styles.secondaryButton}
                 onClick={handleEndSessionClick}
-                disabled={isSending}
+                disabled={isSending || isListening}
               >
                 End Session
               </button>
