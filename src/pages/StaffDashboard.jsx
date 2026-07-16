@@ -31,6 +31,13 @@ function formatLastSession(days) {
   if (days === 1) return 'Last session: yesterday';
   return 'Last session: ' + days + ' days ago';
 }
+
+// full_name is stored as a single "First Last" string — pull out just the
+// first token to sort by, rather than the whole name, so a case like
+// "Alex Zimmer" still sorts before "Blake Adams".
+function getFirstName(fullName) {
+  return (fullName || '').trim().split(/\s+/)[0] || '';
+}
  
 export default function StaffDashboard() {
   const { user, role, loading: authLoading } = useAuth();
@@ -70,7 +77,13 @@ export default function StaffDashboard() {
         return;
       }
 
-      const loadedIndividuals = data || [];
+      const loadedIndividuals = (data || [])
+        .slice()
+        .sort((a, b) =>
+          getFirstName(a.full_name).localeCompare(getFirstName(b.full_name), undefined, {
+            sensitivity: 'base',
+          })
+        );
       setIndividuals(loadedIndividuals);
 
       if (loadedIndividuals.length > 0) {
