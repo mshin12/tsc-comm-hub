@@ -21,10 +21,15 @@ import { parseTierNumber } from './tier';
  *   [AAC_GUIDANCE]        -> a fixed guidance block, only when
  *                            individual.uses_aac === true; empty string
  *                            otherwise (never "not specified" — see below)
+ *   [RECENT_FOCUS]        -> recentFocus param, wrapped in an inviting-not-
+ *                            forcing sentence; empty string when none is
+ *                            passed (never "not specified" — see below)
  *
  * @param {string} promptTemplate - Template string containing placeholders.
  * @param {object} individual - Individual record with the fields above.
  * @param {string} [scenario] - Description of the scenario/activity for this session.
+ * @param {string} [recentFocus] - Most recent staff-identified suggested_focus
+ *   for this individual (see lib/recentFocus.js), if any.
  * @returns {string} The template with all placeholders replaced.
  */
 
@@ -59,6 +64,24 @@ function buildAacGuidance(safe) {
   return AAC_GUIDANCE_TEMPLATE.replace('{AAC_REFERENCE}', reference);
 }
 
+// Next-session recommendation loop: staff debrief can identify a short,
+// forward-looking suggested_focus after a session (api/debrief.js), which
+// carries forward into the next session's assembled prompt here. Wrapped
+// as an invitation, not an instruction to force — the model should weave
+// it in only if a natural opportunity arises, same spirit as [AAC_GUIDANCE]
+// not being something to announce or call attention to.
+const RECENT_FOCUS_TEMPLATE = `From this individual's last staff-reviewed session, here's something worth gently keeping in mind today if a natural opportunity arises — don't force it, call attention to it, or steer the scene toward it: {RECENT_FOCUS}`;
+
+function buildRecentFocus(recentFocus) {
+  // Same empty-string discipline as buildAacGuidance above — no recent
+  // focus (a first session, or no debrief has produced one yet) must
+  // collapse to nothing injected at all, not a "not specified" filler.
+  const trimmed = recentFocus && String(recentFocus).trim() !== '' ? String(recentFocus).trim() : null;
+  if (!trimmed) return '';
+
+  return RECENT_FOCUS_TEMPLATE.replace('{RECENT_FOCUS}', trimmed);
+}
+
 // Applied to every scenario regardless of what an individual prompts row
 // says, so staff never have to remember to add formatting rules when they
 // write a new scenario. Without this, Claude defaults to its normal
@@ -72,7 +95,7 @@ const STYLE_CONTRACT = `You are roleplaying as a character in a live communicati
 - Keep each response short and conversational (1-3 sentences), matching how a real person would talk in this moment. Never write a long, structured, or explanatory reply.
 - Never explain the activity, list example responses, or give the individual a "menu" of ways they could respond. Just say your line in character and wait for their turn.`;
 
-function assemblePrompt(promptTemplate, individual, scenario) {
+function assemblePrompt(promptTemplate, individual, scenario, recentFocus) {
   const safe = individual || {};
 
   const fill = (value) => {
@@ -94,6 +117,7 @@ function assemblePrompt(promptTemplate, individual, scenario) {
     '[KEY VOCABULARY]': fill(safe.vocabulary_notes),
     '[SCENARIO]': fill(scenario),
     '[AAC_GUIDANCE]': buildAacGuidance(safe),
+    '[RECENT_FOCUS]': buildRecentFocus(recentFocus),
   };
 
   let result = promptTemplate;

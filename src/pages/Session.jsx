@@ -5,6 +5,7 @@ import { assemblePrompt } from '../lib/assemblePrompt';
 import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
 import { logAction } from '../lib/auditLog';
+import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import Mascot from '../components/Mascot';
  
@@ -41,6 +42,10 @@ export default function Session() {
   const [selectedPromptId, setSelectedPromptId] = useState('');
   const [loading, setLoading] = useState(!!individualId);
   const [error, setError] = useState('');
+  // Most recent staff-identified suggested_focus for this individual, if
+  // any — fetched alongside prompts so it's ready by the time a session
+  // actually starts, rather than adding another await to that click.
+  const [recentFocus, setRecentFocus] = useState('');
  
   const [assembledPrompt, setAssembledPrompt] = useState('');
   const [sessionActive, setSessionActive] = useState(false);
@@ -109,14 +114,18 @@ export default function Session() {
       setIndividual(individualData);
 
       const tierNumber = parseTierNumber(individualData.communication_tier);
-      const { data: promptsData, error: promptsError } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('tier', tierNumber)
-        .eq('is_active', true);
- 
+      const [promptsResult, recentFocusResult] = await Promise.all([
+        supabase
+          .from('prompts')
+          .select('*')
+          .eq('tier', tierNumber)
+          .eq('is_active', true),
+        fetchRecentSuggestedFocus(individualData.id),
+      ]);
+      const { data: promptsData, error: promptsError } = promptsResult;
+
       if (!isMounted) return;
- 
+
       if (promptsError) {
         setError('Could not load scenario prompts for this tier.');
         setPrompts([]);
@@ -131,7 +140,9 @@ export default function Session() {
         );
         setPrompts(usablePrompts);
       }
- 
+
+      setRecentFocus(recentFocusResult);
+
       setLoading(false);
     };
  
@@ -207,7 +218,8 @@ export default function Session() {
     const builtPrompt = assemblePrompt(
       selectedPrompt.system_prompt,
       individual,
-      selectedPrompt.scenario_name
+      selectedPrompt.scenario_name,
+      recentFocus
     );
 
     sessionStartTimeRef.current = startTime;
@@ -280,6 +292,7 @@ export default function Session() {
           challenge_noted: data.challenge_noted || null,
           goal_moment: data.goal_moment || null,
           family_summary: data.family_summary || null,
+          suggested_focus: data.suggested_focus || null,
         })
         .eq('id', sessionIdToUse);
 

@@ -26,6 +26,7 @@ export default function SessionLog() {
   const [wentWell, setWentWell] = useState('');
   const [challengeNoted, setChallengeNoted] = useState('');
   const [goalMoment, setGoalMoment] = useState('');
+  const [suggestedFocus, setSuggestedFocus] = useState('');
   const [staffNotes, setStaffNotes] = useState('');
   const [familySummary, setFamilySummary] = useState('');
   const [sessionLength, setSessionLength] = useState(
@@ -52,7 +53,7 @@ export default function SessionLog() {
       const { data, error: fetchError } = await supabase
         .from('sessions')
         .select(
-          'individual_id, scenario_used, session_length, transcript, went_well, challenge_noted, goal_moment, staff_notes, family_summary'
+          'individual_id, scenario_used, session_length, transcript, went_well, challenge_noted, goal_moment, suggested_focus, staff_notes, family_summary'
         )
         .eq('id', sessionId)
         .single();
@@ -69,6 +70,7 @@ export default function SessionLog() {
       setWentWell(data.went_well || '');
       setChallengeNoted(data.challenge_noted || '');
       setGoalMoment(data.goal_moment || '');
+      setSuggestedFocus(data.suggested_focus || '');
       setStaffNotes(data.staff_notes || '');
       setFamilySummary(data.family_summary || '');
       setSessionLength(
@@ -154,6 +156,7 @@ export default function SessionLog() {
       setWentWell(data.went_well || '');
       setChallengeNoted(data.challenge_noted || '');
       setGoalMoment(data.goal_moment || '');
+      setSuggestedFocus(data.suggested_focus || '');
       setFamilySummary(data.family_summary || '');
     } catch (err) {
       setGenerateError(err.message || 'Could not generate a session summary.');
@@ -165,9 +168,14 @@ export default function SessionLog() {
   const handleSubmit = async () => {
     setError('');
 
-    const hasContent = [wentWell, challengeNoted, goalMoment, staffNotes, familySummary].some(
-      (value) => value.trim() !== ''
-    );
+    const hasContent = [
+      wentWell,
+      challengeNoted,
+      goalMoment,
+      suggestedFocus,
+      staffNotes,
+      familySummary,
+    ].some((value) => value.trim() !== '');
 
     if (!hasContent) {
       setError('Please fill in at least one field before saving.');
@@ -187,6 +195,7 @@ export default function SessionLog() {
         went_well: wentWell.trim() || null,
         challenge_noted: challengeNoted.trim() || null,
         goal_moment: goalMoment.trim() || null,
+        suggested_focus: suggestedFocus.trim() || null,
         staff_notes: staffNotes.trim() || null,
         family_summary: familySummary.trim() || null,
         session_length: sessionLength !== '' ? parseInt(sessionLength, 10) : null,
@@ -337,6 +346,25 @@ export default function SessionLog() {
           rows={4}
           disabled={disabled}
           placeholder="Generated after the session ends — or describe a goal-relevant moment yourself..."
+        />
+      </div>
+
+      <div style={styles.field}>
+        <label style={styles.label} htmlFor="suggested-focus">
+          Suggested focus for next session <span style={styles.aiTag}>AI-drafted</span>
+        </label>
+        <p style={styles.hint}>
+          Carried forward into this individual's next session prompt (staff or family) as a gentle
+          suggestion — never shown to family directly.
+        </p>
+        <textarea
+          id="suggested-focus"
+          value={suggestedFocus}
+          onChange={(e) => setSuggestedFocus(e.target.value)}
+          style={styles.textarea}
+          rows={3}
+          disabled={disabled}
+          placeholder="Generated after the session ends — or describe what to gently emphasize next time..."
         />
       </div>
 

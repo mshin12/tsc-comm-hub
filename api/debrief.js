@@ -34,8 +34,13 @@ const ANALYSIS_TOOL = {
         description:
           'A warm, plain-language 1-3 sentence summary suitable for sharing directly with family members. No clinical language.',
       },
+      suggested_focus: {
+        type: 'string',
+        description:
+          "A single short, concrete, forward-looking sentence about what to gently emphasize in this individual's NEXT session — grounded only in what actually happened in this transcript. Not a diagnosis, not clinical language, and not a restatement of challenge_noted. Return an empty string if nothing specific stands out this session — don't fabricate a suggestion just to fill the field.",
+      },
     },
-    required: ['went_well', 'challenge_noted', 'goal_moment', 'family_summary'],
+    required: ['went_well', 'challenge_noted', 'goal_moment', 'family_summary', 'suggested_focus'],
   },
 };
 
@@ -66,7 +71,9 @@ function buildAnalysisSystemPrompt(individual) {
 
 You will receive the full transcript of a completed roleplay practice session. In the transcript, "assistant" turns are the in-character roleplay partner, and "user" turns are what the individual communicated.
 
-Analyze only what actually happened in this transcript — never invent details it doesn't support. Call the log_session_analysis tool with your analysis. If a category genuinely doesn't apply, say so briefly and honestly rather than fabricating detail.`;
+Analyze only what actually happened in this transcript — never invent details it doesn't support. Call the log_session_analysis tool with your analysis. If a category genuinely doesn't apply, say so briefly and honestly rather than fabricating detail.
+
+Note that the session is always ended by a staff/admin user, so the END SESSION transcript message is not the individual's own words. Do not treat it as a user turn when analyzing the transcript and generating the summary.`;
 }
 
 function buildFamilySummarySystemPrompt(individual) {
@@ -76,7 +83,9 @@ function buildFamilySummarySystemPrompt(individual) {
 
 You will receive the full transcript. In it, "assistant" turns are the in-character roleplay partner, and "user" turns are what the individual communicated.
 
-Call the log_family_summary tool with a short, warm summary of what happened, written directly for the family — plain language, no clinical or technical terms. Base it only on what actually happened in the transcript.`;
+Call the log_family_summary tool with a short, warm summary of what happened, written directly for the family — plain language, no clinical or technical terms. Base it only on what actually happened in the transcript.
+
+Note that the session may be ended by a family member or caregiver, so the END SESSION transcript message is not necessarily the individual's own words. Do not assume it is a user turn when analyzing the transcript and generating the summary`;
 }
 
 export default async function handler(req, res) {

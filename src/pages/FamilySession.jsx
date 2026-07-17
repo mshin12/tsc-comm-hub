@@ -5,6 +5,7 @@ import { assemblePrompt } from '../lib/assemblePrompt';
 import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
 
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -31,6 +32,10 @@ export default function FamilySession() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [startingId, setStartingId] = useState(null);
+  // Most recent staff-identified suggested_focus for this individual, if
+  // any — carries forward even when the individual's most recent session
+  // was a family self-practice one, not just staff-conducted ones.
+  const [recentFocus, setRecentFocus] = useState('');
 
   const [assembledPrompt, setAssembledPrompt] = useState('');
   const [sessionActive, setSessionActive] = useState(false);
@@ -94,12 +99,16 @@ export default function FamilySession() {
       setIndividual(individualData);
 
       const tierNumber = parseTierNumber(individualData.communication_tier);
-      const { data: activitiesData, error: activitiesError } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('tier', tierNumber)
-        .eq('is_active', true)
-        .eq('audience', 'family');
+      const [activitiesResult, recentFocusResult] = await Promise.all([
+        supabase
+          .from('prompts')
+          .select('*')
+          .eq('tier', tierNumber)
+          .eq('is_active', true)
+          .eq('audience', 'family'),
+        fetchRecentSuggestedFocus(individualData.id),
+      ]);
+      const { data: activitiesData, error: activitiesError } = activitiesResult;
 
       if (!isMounted) return;
 
@@ -114,6 +123,8 @@ export default function FamilySession() {
         );
         setActivities(usable);
       }
+
+      setRecentFocus(recentFocusResult);
 
       setLoading(false);
     };
@@ -209,7 +220,12 @@ export default function FamilySession() {
       return;
     }
 
-    const builtPrompt = assemblePrompt(activity.system_prompt, individual, activity.scenario_name);
+    const builtPrompt = assemblePrompt(
+      activity.system_prompt,
+      individual,
+      activity.scenario_name,
+      recentFocus
+    );
 
     setSessionId(sessionRow.id);
     setAssembledPrompt(builtPrompt);

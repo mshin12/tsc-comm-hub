@@ -63,8 +63,17 @@ select pg_get_functiondef('public.enforce_admin_only_personal_info_edits'::regpr
 -- to hand-insert the token into each one.
 -- ============================================================
 
-select tier, scenario_name, audience
-from public.prompts
-where is_active = true
-  and system_prompt not ilike '%[AAC_GUIDANCE]%'
-order by audience, tier, scenario_name;
+-- audience is read via to_jsonb(p) ->> 'audience' rather than a plain
+-- column reference so this degrades gracefully (audience simply shows as
+-- null) instead of hard-failing with "column does not exist" if
+-- family_sessions.sql turns out not to be applied in this environment —
+-- see supabase/sessions_suggested_focus.sql's diagnostic query for how to
+-- check that directly.
+select
+  p.tier,
+  p.scenario_name,
+  to_jsonb(p) ->> 'audience' as audience
+from public.prompts p
+where p.is_active = true
+  and p.system_prompt not ilike '%[AAC_GUIDANCE]%'
+order by audience, p.tier, p.scenario_name;
