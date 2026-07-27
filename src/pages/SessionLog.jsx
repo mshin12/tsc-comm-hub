@@ -4,6 +4,20 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { logAction } from '../lib/auditLog';
 
+// Matches the formatDate() already duplicated in AllSessions.jsx,
+// IndividualProfile.jsx, and FamilyView.jsx — same small per-file helper,
+// not worth a shared lib for one date-formatting call each.
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export default function SessionLog() {
   const { sessionId } = useParams();
   const { state } = useLocation();
@@ -53,7 +67,7 @@ export default function SessionLog() {
       const { data, error: fetchError } = await supabase
         .from('sessions')
         .select(
-          'individual_id, scenario_used, session_length, transcript, went_well, challenge_noted, goal_moment, suggested_focus, staff_notes, family_summary'
+          'individual_id, session_date, scenario_used, tier_used, session_length, transcript, went_well, challenge_noted, goal_moment, suggested_focus, staff_notes, family_summary'
         )
         .eq('id', sessionId)
         .single();
@@ -165,6 +179,18 @@ export default function SessionLog() {
     }
   };
 
+  // Printing (or "Save as PDF" from the browser's print dialog, which
+  // covers the "downloadable file" half of the ask without adding a PDF
+  // library) doubles as a real data-export action, same tier as viewing a
+  // session — logged the same way session_logged/family_view_accessed are.
+  const handlePrint = () => {
+    logAction('session_report_printed', {
+      tableName: 'sessions',
+      recordId: sessionId,
+    });
+    window.print();
+  };
+
   const handleSubmit = async () => {
     setError('');
 
@@ -257,10 +283,19 @@ export default function SessionLog() {
           ← Back to Profile
         </button>
       )}
-      <h1 style={styles.heading}>Session Log</h1>
-      {scenarioUsed && (
-        <p style={styles.subheading}>Scenario: {scenarioUsed}</p>
-      )}
+      <div style={styles.headingRow}>
+        <div>
+          <h1 style={styles.heading}>Session Log</h1>
+          {scenarioUsed && (
+            <p style={styles.subheading}>Scenario: {scenarioUsed}</p>
+          )}
+        </div>
+        {!loadError && (
+          <button type="button" style={styles.secondaryButton} onClick={handlePrint}>
+            Print / Save Report
+          </button>
+        )}
+      </div>
 
       {loadError && <div style={styles.errorBanner}>{loadError}</div>}
       {error && <div style={styles.errorBanner}>{error}</div>}
@@ -432,6 +467,67 @@ export default function SessionLog() {
       >
         {submitting ? 'Saving...' : 'Save Session Log'}
       </button>
+
+      {/* Hidden on screen, shown only when printing (see the stylesheet
+          below) — reflects the currently-edited field values, not just
+          what's saved, so staff can preview a draft before saving. */}
+      <div className="session-report">
+        <h1 style={styles.reportHeading}>Session Report</h1>
+        <p style={styles.reportMeta}>
+          {individual?.full_name ? individual.full_name + ' — ' : ''}
+          {formatDate(session?.session_date)}
+          {session?.tier_used ? ' — Tier ' + session.tier_used : ''}
+        </p>
+        {scenarioUsed && <p style={styles.reportMeta}>Scenario: {scenarioUsed}</p>}
+        {sessionLength && <p style={styles.reportMeta}>Session length: {sessionLength} minutes</p>}
+
+        {[
+          ['What went well', wentWell],
+          ['Challenges noted', challengeNoted],
+          ['Goal moment', goalMoment],
+          ['Suggested focus for next session', suggestedFocus],
+          ['Family-facing summary', familySummary],
+          ['Staff notes', staffNotes],
+        ]
+          .filter(([, value]) => value.trim() !== '')
+          .map(([label, value]) => (
+            <div key={label} style={styles.reportSection}>
+              <h2 style={styles.reportSectionHeading}>{label}</h2>
+              <p style={styles.reportSectionBody}>{value}</p>
+            </div>
+          ))}
+
+        <div style={styles.reportSection}>
+          <h2 style={styles.reportSectionHeading}>Transcript</h2>
+          {transcript.length === 0 ? (
+            <p style={styles.reportSectionBody}>No transcript recorded for this session.</p>
+          ) : (
+            transcript.map((message, index) => (
+              <p key={index} style={styles.reportTranscriptRow}>
+                <span style={styles.transcriptRole}>
+                  {message.role === 'user' ? 'Individual: ' : 'Assistant: '}
+                </span>
+                {message.content}
+              </p>
+            ))
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        .session-report { display: none; }
+        @media print {
+          body * { visibility: hidden; }
+          .session-report, .session-report * { visibility: visible; }
+          .session-report {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -453,6 +549,12 @@ const styles = {
     cursor: 'pointer',
     display: 'block',
   },
+  headingRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
   heading: {
     fontSize: 25,
     margin: '0 0 4px 0',
@@ -461,6 +563,35 @@ const styles = {
     fontSize: 17,
     color: '#6b7280',
     margin: '0 0 24px 0',
+  },
+  reportHeading: {
+    fontSize: 22,
+    margin: '0 0 8px 0',
+  },
+  reportMeta: {
+    fontSize: 15,
+    color: '#374151',
+    margin: '0 0 4px 0',
+  },
+  reportSection: {
+    marginTop: 20,
+  },
+  reportSectionHeading: {
+    fontSize: 16,
+    fontWeight: 700,
+    margin: '0 0 6px 0',
+  },
+  reportSectionBody: {
+    fontSize: 15,
+    lineHeight: 1.5,
+    whiteSpace: 'pre-wrap',
+    margin: 0,
+  },
+  reportTranscriptRow: {
+    fontSize: 15,
+    lineHeight: 1.5,
+    whiteSpace: 'pre-wrap',
+    margin: '0 0 8px 0',
   },
   centered: {
     display: 'flex',
