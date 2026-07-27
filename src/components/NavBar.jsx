@@ -1,9 +1,11 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { logAction } from '../lib/auditLog';
+import { useAuth } from '../hooks/useAuth';
 
 export default function NavBar() {
   const navigate = useNavigate();
+  const { role } = useAuth();
 
   const handleSignOut = async () => {
     // Unlike every other logAction() call in the app, this one is awaited
@@ -19,13 +21,20 @@ export default function NavBar() {
   return (
     <nav style={styles.nav}>
       <span style={styles.title}>TSC</span>
-      <button
-        type="button"
-        style={styles.signOutButton}
-        onClick={handleSignOut}
-      >
-        Sign Out
-      </button>
+      <div style={styles.actions}>
+        {role === 'admin' && (
+          <Link to="/admin/invite" style={styles.inviteLink}>
+            Invite User
+          </Link>
+        )}
+        <button
+          type="button"
+          style={styles.signOutButton}
+          onClick={handleSignOut}
+        >
+          Sign Out
+        </button>
+      </div>
     </nav>
   );
 }
@@ -44,6 +53,17 @@ const styles = {
     fontWeight: 700,
     color: '#fff',
     letterSpacing: '0.03em',
+  },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+  },
+  inviteLink: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: '#fff',
+    textDecoration: 'underline',
   },
   signOutButton: {
     padding: '6px 14px',

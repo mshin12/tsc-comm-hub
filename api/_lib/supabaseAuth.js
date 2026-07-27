@@ -55,3 +55,24 @@ export async function assertSessionAccess(userClient, sessionId) {
 
   return !error && !!data;
 }
+
+/**
+ * Same as authenticate(), but additionally requires the caller's own role
+ * (read through their own RLS-scoped client, via the pre-existing
+ * "users: read own" policy — never a service-role lookup) to be 'admin'.
+ * Returns null if the token is invalid or the caller isn't an admin.
+ */
+export async function authenticateAdmin(token) {
+  const auth = await authenticate(token);
+  if (!auth) return null;
+
+  const { data, error } = await auth.userClient
+    .from('users')
+    .select('role')
+    .eq('id', auth.user.id)
+    .single();
+
+  if (error || data?.role !== 'admin') return null;
+
+  return auth;
+}
