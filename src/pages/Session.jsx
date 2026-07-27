@@ -114,6 +114,20 @@ export default function Session() {
       setIndividual(individualData);
 
       const tierNumber = parseTierNumber(individualData.communication_tier);
+      // prompts.tier is NOT NULL (see supabase/database_schema.sql), so
+      // there's no real row a null tierNumber could ever match — querying
+      // .eq('tier', null) anyway would silently return zero rows and show
+      // the generic "no scenarios" empty state, masking that the actual
+      // problem is unparseable communication_tier data on this individual.
+      // Catch it here instead so the message points at the real cause.
+      if (tierNumber === null) {
+        setError('Could not determine this individual’s communication tier. Check their profile data.');
+        setPrompts([]);
+        setRecentFocus('');
+        setLoading(false);
+        return;
+      }
+
       const [promptsResult, recentFocusResult] = await Promise.all([
         supabase
           .from('prompts')
