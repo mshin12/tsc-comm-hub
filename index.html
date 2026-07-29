@@ -6,6 +6,10 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Same intent as src/index.css's `color-scheme: light` — declaring it
+         here too means the browser knows before CSS even finishes loading,
+         so there's no flash of dark-styled native UI on first paint. -->
+    <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#111827" />
     <!-- iOS ignores the web manifest for "Add to Home Screen" — these three
          tags are what actually make it launch full-screen (no Safari
