@@ -3,8 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tsc-app</title>
+    <meta name="theme-color" content="#111827" />
+    <!-- iOS ignores the web manifest for "Add to Home Screen" — these three
+         tags are what actually make it launch full-screen (no Safari
+         chrome/URL bar) and get a proper name/icon there. "black" (not
+         "black-translucent") keeps a solid status bar that pushes content
+         below it automatically — no safe-area-inset CSS needed anywhere. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="TSC" />
+    <title>The Shine Community</title>
   </head>
   <body>
     <div id="root"></div>

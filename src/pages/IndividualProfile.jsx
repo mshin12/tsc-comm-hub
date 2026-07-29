@@ -434,6 +434,7 @@ const styles = {
   },
   headerButtons: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: 8,
   },
   primaryButton: {
@@ -520,9 +521,12 @@ const styles = {
     color: '#374151',
     marginTop: 2,
   },
+  // padding bumped from the original '4px 10px' (~27px effective height) to
+  // a real touch target (~40px) — this is the only way to open/finish a
+  // session log from this list, so it needs to be reliably tappable.
   finishLogButton: {
     marginTop: 6,
-    padding: '4px 10px',
+    padding: '9px 14px',
     fontSize: 16,
     fontWeight: 600,
     color: '#a94442',
@@ -533,7 +537,7 @@ const styles = {
   },
   viewLogButton: {
     marginTop: 6,
-    padding: '4px 10px',
+    padding: '9px 14px',
     fontSize: 16,
     fontWeight: 600,
     color: '#2563eb',

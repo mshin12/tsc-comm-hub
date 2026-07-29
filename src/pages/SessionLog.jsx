@@ -553,6 +553,7 @@ const styles = {
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 16,
   },
   heading: {
@@ -622,7 +623,7 @@ const styles = {
   },
   transcriptList: {
     marginTop: 12,
-    maxHeight: 280,
+    maxHeight: 'min(280px, 50dvh)',
     overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column',

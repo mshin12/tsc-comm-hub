@@ -44,7 +44,9 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '12px 24px',
+    flexWrap: 'wrap',
+    rowGap: 8,
+    padding: '12px 16px',
     backgroundColor: '#111827',
     fontFamily: 'sans-serif',
   },
@@ -57,16 +59,22 @@ const styles = {
   actions: {
     display: 'flex',
     alignItems: 'center',
-    gap: 16,
+    gap: 8,
   },
+  // Both are the sole way to trigger their action, so both get a real touch
+  // target (~44px effective height with this padding) rather than the
+  // desktop-sized hit areas a mouse cursor doesn't need.
   inviteLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '10px 12px',
     fontSize: 15,
     fontWeight: 600,
     color: '#fff',
     textDecoration: 'underline',
   },
   signOutButton: {
-    padding: '6px 14px',
+    padding: '12px 16px',
     fontSize: 16,
     fontWeight: 600,
     color: '#111827',

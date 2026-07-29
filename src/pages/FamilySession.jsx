@@ -621,8 +621,11 @@ const styles = {
     overflow: 'hidden',
     backgroundColor: '#fff',
   },
+  // min(400px, 50dvh) instead of a flat 400px — see Session.jsx's identical
+  // comment: a fixed pane this tall can push the input row off-screen once
+  // a mobile on-screen keyboard shrinks the visible viewport.
   messageList: {
-    height: 400,
+    height: 'min(400px, 50dvh)',
     overflowY: 'auto',
     padding: 16,
     display: 'flex',
@@ -690,8 +693,10 @@ const styles = {
     resize: 'none',
     fontFamily: 'inherit',
   },
+  // padding bumped slightly (10px -> 12px vertical) for a comfortable touch
+  // target — this is the sole way to toggle voice input.
   micButton: {
-    padding: '10px 14px',
+    padding: '12px 14px',
     fontSize: 19,
     fontWeight: 600,
     color: '#374151',

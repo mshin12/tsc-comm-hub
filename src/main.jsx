@@ -33,3 +33,13 @@ createRoot(document.getElementById('root')).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+// Production-only: registering in dev would sit alongside Vite's own dev
+// server behavior for no benefit, since the whole point (installability on
+// a real deployment) doesn't apply to `npm run dev`. See public/sw.js for
+// why it has no fetch handler.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js');
+  });
+}

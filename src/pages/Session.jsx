@@ -830,8 +830,13 @@ const styles = {
     padding: '12px 0 0',
     backgroundColor: '#f9fafb',
   },
+  // min(360px, 50dvh) instead of a flat 360px — on a short mobile viewport
+  // (especially once the on-screen keyboard shrinks it further) a fixed
+  // 360px chat pane plus the 240px mascot above it can push the input row
+  // most of the way off-screen. dvh (not vh) tracks the *actual* visible
+  // viewport as the keyboard opens/closes, not just the initial page load.
   messageList: {
-    height: 360,
+    height: 'min(360px, 50dvh)',
     overflowY: 'auto',
     padding: 16,
     display: 'flex',
@@ -908,14 +913,19 @@ const styles = {
     borderRadius: 4,
     cursor: 'pointer',
   },
+  // flexWrap + textInput's 200px basis (matching FamilySession.jsx's
+  // already-correct version of this same row) — without it, the textarea
+  // plus mic/Send/End Session buttons don't fit a ~360px phone screen and
+  // the textarea gets crushed to near-zero width.
   inputRow: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: 8,
     padding: 12,
     borderTop: '1px solid #e5e7eb',
   },
   textInput: {
-    flex: 1,
+    flex: '1 1 200px',
     padding: '10px 12px',
     fontSize: 17,
     border: '1px solid #ccc',
@@ -923,8 +933,10 @@ const styles = {
     resize: 'none',
     fontFamily: 'inherit',
   },
+  // padding bumped slightly (10px -> 12px vertical) for a comfortable touch
+  // target — this is the sole way to toggle voice input.
   micButton: {
-    padding: '10px 14px',
+    padding: '12px 14px',
     fontSize: 19,
     fontWeight: 600,
     color: '#374151',

@@ -149,7 +149,11 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
     },
   }));
  
-  return <RiveComponent style={{ width: 240, height: 240 }} />;
+  // width: '100%' + maxWidth caps it at the original 240px design size on
+  // normal screens but lets it shrink on narrow phones/landscape instead of
+  // forcing horizontal overflow; aspectRatio keeps it square without a
+  // fixed height.
+  return <RiveComponent style={{ width: '100%', maxWidth: 240, aspectRatio: '1 / 1' }} />;
 });
  
 export default Mascot;

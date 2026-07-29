@@ -40,6 +40,31 @@ export default function Login() {
       return;
     }
 
+    // Returning to "/" with an existing session — most commonly from the
+    // installed app's home-screen icon, where start_url is always "/" —
+    // should land straight on the role's home page instead of a redundant
+    // login form. Supabase persists the session in localStorage across
+    // launches, so this is the common case for anyone who's used the app
+    // before, not just a rare edge case.
+    let isMounted = true;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!isMounted || !session?.user) return;
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!isMounted) return;
+
+      if (profile?.role === 'staff' || profile?.role === 'admin') {
+        navigate('/dashboard', { replace: true });
+      } else if (profile?.role === 'family') {
+        navigate('/family', { replace: true });
+      }
+    });
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
@@ -48,7 +73,10 @@ export default function Login() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleLogin = async () => {
