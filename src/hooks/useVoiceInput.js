@@ -9,10 +9,21 @@ import { useEffect, useRef, useState } from 'react';
 // onInterimResult(text) fires repeatedly with the current in-progress guess
 // for whatever's being spoken right now, so callers can show it as a live,
 // replaceable preview (it isn't final yet and may still change).
-export function useVoiceInput({ onInterimResult, onFinalResult } = {}) {
+export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [supported, setSupported] = useState(false);
   const recognitionRef = useRef(null);
+
+  // Read once at mount via a ref, same as the callbacks below — this hook
+  // creates its SpeechRecognition instance exactly once (mount-only effect),
+  // so a caller whose `lang` could change after mount (e.g. FamilySession.jsx
+  // right after useAuth() resolves) still gets the right value without
+  // needing this whole hook to re-run.
+  const langRef = useRef(lang);
+  useEffect(() => {
+    langRef.current = lang;
+    if (recognitionRef.current) recognitionRef.current.lang = lang;
+  }, [lang]);
 
   // Tracks the user's actual INTENT (did they click the mic off?), distinct
   // from the recognition engine's own running state — see onend below for
@@ -46,7 +57,7 @@ export function useVoiceInput({ onInterimResult, onFinalResult } = {}) {
     // the final settled chunk at the end.
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = langRef.current;
 
     recognition.onresult = (event) => {
       let interimTranscript = '';

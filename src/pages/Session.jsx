@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
 import { logAction } from '../lib/auditLog';
 import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
+import { fetchFamilyLanguage } from '../lib/familyLanguage';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import Mascot from '../components/Mascot';
  
@@ -268,9 +269,15 @@ export default function Session() {
     setAnalysisError('');
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const [{ data: { session } }, familyLanguage] = await Promise.all([
+        supabase.auth.getSession(),
+        // Staff conducts this session entirely in English, but the
+        // family_summary field the debrief produces is what the linked
+        // family account will read — if that account prefers Korean, this
+        // is what makes just that one field come out in Korean without
+        // staff ever touching it themselves (CLAUDE.md Known Issues #13).
+        fetchFamilyLanguage(individual.id),
+      ]);
 
       const response = await fetch('/api/debrief', {
         method: 'POST',
@@ -282,6 +289,7 @@ export default function Session() {
         },
         body: JSON.stringify({
           sessionId: sessionIdToUse,
+          familyLanguage,
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
             .map(({ role, content }) => ({ role, content })),

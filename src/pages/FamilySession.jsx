@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
+import { t } from '../lib/familyStrings';
 
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -25,7 +26,7 @@ const KICKOFF_MESSAGE = {
 
 export default function FamilySession() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, preferredLanguage, loading: authLoading } = useAuth();
 
   const [individual, setIndividual] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -59,6 +60,7 @@ export default function FamilySession() {
     onFinalResult: (transcript) =>
       setInputText((prev) => (prev ? prev + ' ' : '') + transcript),
     onInterimResult: setInterimTranscript,
+    lang: preferredLanguage === 'ko' ? 'ko-KR' : 'en-US',
   });
 
   // What the textarea actually displays while listening: the already-typed/
@@ -91,7 +93,7 @@ export default function FamilySession() {
       if (!isMounted) return;
 
       if (individualError || !individualData) {
-        setError('Could not find a linked individual for your account.');
+        setError(t(preferredLanguage, 'noLinkedIndividual'));
         setLoading(false);
         return;
       }
@@ -106,7 +108,7 @@ export default function FamilySession() {
       // problem is unparseable communication_tier data on this individual.
       // Catch it here instead so the message points at the real cause.
       if (tierNumber === null) {
-        setError('Could not determine your linked individual’s communication tier. Contact your administrator.');
+        setError(t(preferredLanguage, 'couldNotDetermineTier'));
         setActivities([]);
         setRecentFocus('');
         setLoading(false);
@@ -127,7 +129,7 @@ export default function FamilySession() {
       if (!isMounted) return;
 
       if (activitiesError) {
-        setError('Could not load practice activities.');
+        setError(t(preferredLanguage, 'couldNotLoadActivities'));
         setActivities([]);
       } else {
         const usable = (activitiesData || []).filter(
@@ -148,7 +150,7 @@ export default function FamilySession() {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, preferredLanguage]);
 
   useEffect(() => {
     if (messageListRef.current) {
@@ -176,6 +178,11 @@ export default function FamilySession() {
         body: JSON.stringify({
           sessionId: sessionIdToUse,
           mode: 'family_summary_only',
+          // The family member IS this account, so their own preferred
+          // language (already known via useAuth()) is what the summary
+          // should be written in — no lookup needed, unlike the
+          // staff-conducted case (see lib/familyLanguage.js).
+          familyLanguage: preferredLanguage,
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
             .map(({ role, content }) => ({ role, content })),
@@ -190,7 +197,7 @@ export default function FamilySession() {
       const data = contentType.includes('application/json') ? await response.json() : null;
 
       if (!response.ok || !data) {
-        throw new Error(data?.error || 'Could not generate a summary.');
+        throw new Error(data?.error || t(preferredLanguage, 'couldNotGenerateSummary'));
       }
 
       const { error: updateError } = await supabase
@@ -199,10 +206,10 @@ export default function FamilySession() {
         .eq('id', sessionIdToUse);
 
       if (updateError) {
-        throw new Error('Generated a summary but could not save it.');
+        throw new Error(t(preferredLanguage, 'generatedButNotSaved'));
       }
     } catch (err) {
-      setAnalysisError(err.message || 'Could not generate a summary for this session.');
+      setAnalysisError(err.message || t(preferredLanguage, 'couldNotGenerateSessionSummary'));
     } finally {
       setAnalyzingSession(false);
     }
@@ -230,7 +237,7 @@ export default function FamilySession() {
     setStartingId(null);
 
     if (insertError || !sessionRow) {
-      setError('Could not start the activity. Please try again.');
+      setError(t(preferredLanguage, 'couldNotStartActivity'));
       return;
     }
 
@@ -238,7 +245,8 @@ export default function FamilySession() {
       activity.system_prompt,
       individual,
       activity.scenario_name,
-      recentFocus
+      recentFocus,
+      preferredLanguage
     );
 
     setSessionId(sessionRow.id);
@@ -282,11 +290,11 @@ export default function FamilySession() {
       const data = contentType.includes('application/json') ? await response.json() : null;
 
       if (!response.ok) {
-        throw new Error(data?.error || 'The assistant could not respond. Please try again.');
+        throw new Error(data?.error || t(preferredLanguage, 'assistantNoResponse'));
       }
 
       if (!data) {
-        throw new Error('Received an unexpected response from the server. Please try again.');
+        throw new Error(t(preferredLanguage, 'unexpectedResponse'));
       }
 
       const assistantMessage = {
@@ -313,7 +321,7 @@ export default function FamilySession() {
         analysisPromiseRef.current = runFamilySummary(activeSessionId, finalMessages);
       }
     } catch (err) {
-      setChatError(err.message || 'Something went wrong. Please try again.');
+      setChatError(err.message || t(preferredLanguage, 'somethingWentWrong'));
       setLastFailedTurn({ messages: updatedMessages, isEndSession, overrides });
     } finally {
       setIsSending(false);
@@ -374,7 +382,9 @@ export default function FamilySession() {
   if (!individual) {
     return (
       <div style={styles.page}>
-        <div style={styles.errorBanner}>{error || 'Could not find a linked individual.'}</div>
+        <div style={styles.errorBanner}>
+          {error || t(preferredLanguage, 'noLinkedIndividualFallback')}
+        </div>
       </div>
     );
   }
@@ -382,22 +392,22 @@ export default function FamilySession() {
   return (
     <div style={styles.page}>
       <button type="button" style={styles.backButton} onClick={() => navigate('/family')}>
-        ← Back to Overview
+        {t(preferredLanguage, 'backToOverview')}
       </button>
 
-      <h1 style={styles.name}>Practice with {individual.full_name}</h1>
+      <h1 style={styles.name}>
+        {t(preferredLanguage, 'practiceWith', { name: individual.full_name })}
+      </h1>
 
       {error && <div style={styles.errorBanner}>{error}</div>}
 
       {!sessionActive && (
         <div style={styles.setupPanel}>
           {activities.length === 0 ? (
-            <p style={styles.text}>
-              No practice activities are available yet. Please check back soon.
-            </p>
+            <p style={styles.text}>{t(preferredLanguage, 'noActivitiesYet')}</p>
           ) : (
             <>
-              <p style={styles.text}>Choose an activity to practice together:</p>
+              <p style={styles.text}>{t(preferredLanguage, 'chooseActivity')}</p>
               <div style={styles.activityGrid}>
                 {activities.map((activity) => (
                   <button
@@ -407,7 +417,7 @@ export default function FamilySession() {
                     onClick={() => handleStartActivity(activity)}
                     disabled={startingId !== null}
                   >
-                    {startingId === activity.id ? 'Starting…' : activity.scenario_name}
+                    {startingId === activity.id ? t(preferredLanguage, 'starting') : activity.scenario_name}
                   </button>
                 ))}
               </div>
@@ -420,7 +430,7 @@ export default function FamilySession() {
         <div style={styles.chatPanel}>
           <div style={styles.messageList} ref={messageListRef}>
             {messages.filter((m) => !m.hidden).length === 0 && !isSending && (
-              <div style={styles.emptyChat}>Getting things ready…</div>
+              <div style={styles.emptyChat}>{t(preferredLanguage, 'gettingReady')}</div>
             )}
             {messages
               .filter((m) => !m.hidden)
@@ -445,7 +455,7 @@ export default function FamilySession() {
 
             {isSending && (
               <div style={styles.messageRow}>
-                <div style={styles.typingIndicator}>Thinking...</div>
+                <div style={styles.typingIndicator}>{t(preferredLanguage, 'thinking')}</div>
               </div>
             )}
           </div>
@@ -460,7 +470,7 @@ export default function FamilySession() {
                   onClick={handleRetry}
                   disabled={isSending}
                 >
-                  Retry
+                  {t(preferredLanguage, 'retry')}
                 </button>
               )}
             </div>
@@ -478,7 +488,7 @@ export default function FamilySession() {
                 // that and produce garbled text. Toggle the mic off to
                 // resume typing/editing.
                 disabled={isSending || isListening}
-                placeholder="Type here, or use the mic…"
+                placeholder={t(preferredLanguage, 'typeOrMic')}
                 style={styles.textInput}
                 rows={2}
               />
@@ -491,9 +501,9 @@ export default function FamilySession() {
                   }}
                   onClick={toggleListening}
                   disabled={isSending}
-                  title={isListening ? 'Stop listening' : 'Speak your message'}
+                  title={isListening ? t(preferredLanguage, 'stopListening') : t(preferredLanguage, 'speakMessage')}
                 >
-                  {isListening ? '● Listening…' : '🎤'}
+                  {isListening ? t(preferredLanguage, 'listening') : '🎤'}
                 </button>
               )}
               <button
@@ -502,7 +512,7 @@ export default function FamilySession() {
                 onClick={handleSend}
                 disabled={isSending || isListening || !inputText.trim()}
               >
-                {isSending ? 'Sending...' : 'Send'}
+                {isSending ? t(preferredLanguage, 'sending') : t(preferredLanguage, 'send')}
               </button>
               <button
                 type="button"
@@ -510,15 +520,15 @@ export default function FamilySession() {
                 onClick={handleFinishClick}
                 disabled={isSending || isListening}
               >
-                I'm Done Practicing
+                {t(preferredLanguage, 'donePracticing')}
               </button>
             </div>
           ) : (
             <div style={styles.debriefPanel}>
-              <h2 style={styles.debriefTitle}>Great job!</h2>
+              <h2 style={styles.debriefTitle}>{t(preferredLanguage, 'greatJob')}</h2>
               <p style={styles.debriefText}>{messages[messages.length - 1]?.content}</p>
               {analyzingSession && (
-                <p style={styles.analysisStatus}>Saving a summary of today's practice…</p>
+                <p style={styles.analysisStatus}>{t(preferredLanguage, 'savingSummary')}</p>
               )}
               {analysisError && <p style={styles.analysisError}>{analysisError}</p>}
               <button
@@ -531,7 +541,7 @@ export default function FamilySession() {
                 onClick={handleReturnToOverview}
                 disabled={analyzingSession}
               >
-                {analyzingSession ? 'Finishing up…' : 'Return to Overview'}
+                {analyzingSession ? t(preferredLanguage, 'finishingUp') : t(preferredLanguage, 'returnToOverview')}
               </button>
             </div>
           )}

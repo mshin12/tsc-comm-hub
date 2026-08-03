@@ -33,6 +33,7 @@ import { createClient } from '@supabase/supabase-js';
 import { authenticateAdmin } from './_lib/supabaseAuth.js';
 
 const VALID_ROLES = ['staff', 'family', 'admin'];
+const VALID_LANGUAGES = ['en', 'ko'];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_FULL_NAME_LENGTH = 200;
 
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Only admins can invite new accounts.' });
   }
 
-  const { email, role, fullName } = req.body || {};
+  const { email, role, fullName, preferredLanguage } = req.body || {};
 
   if (typeof email !== 'string' || !EMAIL_PATTERN.test(email.trim())) {
     return res.status(400).json({ error: 'A valid email address is required.' });
@@ -71,6 +72,20 @@ export default async function handler(req, res) {
   ) {
     return res.status(400).json({ error: '"fullName" is invalid.' });
   }
+
+  if (
+    preferredLanguage !== undefined &&
+    preferredLanguage !== null &&
+    !VALID_LANGUAGES.includes(preferredLanguage)
+  ) {
+    return res.status(400).json({ error: '"preferredLanguage" must be one of: ' + VALID_LANGUAGES.join(', ') });
+  }
+
+  // Meaningless for staff/admin (they never get a way to change it, and
+  // never see Korean anywhere) — force 'en' regardless of what was sent,
+  // rather than trusting the client to only send 'ko' alongside role:
+  // 'family'. See CLAUDE.md Known Issues #13.
+  const safePreferredLanguage = role === 'family' && preferredLanguage === 'ko' ? 'ko' : 'en';
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.error('SUPABASE_SERVICE_ROLE_KEY is not configured.');
@@ -90,6 +105,7 @@ export default async function handler(req, res) {
     const { data, error } = await serviceClient.auth.admin.inviteUserByEmail(email.trim(), {
       data: {
         role,
+        preferred_language: safePreferredLanguage,
         ...(trimmedFullName ? { full_name: trimmedFullName } : {}),
       },
     });

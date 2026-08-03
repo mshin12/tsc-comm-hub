@@ -30,6 +30,13 @@ import { parseTierNumber } from './tier';
  * @param {string} [scenario] - Description of the scenario/activity for this session.
  * @param {string} [recentFocus] - Most recent staff-identified suggested_focus
  *   for this individual (see lib/recentFocus.js), if any.
+ * @param {string} [language] - 'ko' to conduct the roleplay in Korean,
+ *   anything else (including omitted) for English. Unlike [AAC_GUIDANCE]/
+ *   [RECENT_FOCUS], this is NOT a text placeholder a prompt template has to
+ *   reference — it's prepended unconditionally alongside STYLE_CONTRACT, so
+ *   it can't be silently skipped by a prompts row that forgot to include a
+ *   token (see CLAUDE.md's family-language feature notes for why this
+ *   needed to work differently from the AAC/recent-focus pattern).
  * @returns {string} The template with all placeholders replaced.
  */
 
@@ -95,7 +102,17 @@ const STYLE_CONTRACT = `You are roleplaying as a character in a live communicati
 - Keep each response short and conversational (1-3 sentences), matching how a real person would talk in this moment. Never write a long, structured, or explanatory reply.
 - Never explain the activity, list example responses, or give the individual a "menu" of ways they could respond. Just say your line in character and wait for their turn.`;
 
-function assemblePrompt(promptTemplate, individual, scenario, recentFocus) {
+// Family-only feature (CLAUDE.md Known Issues #13): only ever called with
+// language='ko' from FamilySession.jsx today — staff-run Session.jsx never
+// passes this, so staff-conducted sessions are always English regardless
+// of what any linked family account prefers.
+const LANGUAGE_GUIDANCE = `Conduct this entire roleplay in Korean. Every line of dialogue you say must be natural, conversational Korean — not English, and not a mix of both. If the individual responds in English, gently continue in Korean rather than switching to match them.`;
+
+function buildLanguageGuidance(language) {
+  return language === 'ko' ? LANGUAGE_GUIDANCE : '';
+}
+
+function assemblePrompt(promptTemplate, individual, scenario, recentFocus, language) {
   const safe = individual || {};
 
   const fill = (value) => {
@@ -127,7 +144,10 @@ function assemblePrompt(promptTemplate, individual, scenario, recentFocus) {
     result = result.replace(new RegExp(escaped, 'g'), value);
   }
 
-  return `${STYLE_CONTRACT}\n\n${result}`;
+  const languageGuidance = buildLanguageGuidance(language);
+  const prefix = languageGuidance ? `${STYLE_CONTRACT}\n\n${languageGuidance}` : STYLE_CONTRACT;
+
+  return `${prefix}\n\n${result}`;
 }
 
 export { assemblePrompt };

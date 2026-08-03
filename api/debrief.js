@@ -64,7 +64,21 @@ const FAMILY_SUMMARY_TOOL = {
   },
 };
 
-function buildAnalysisSystemPrompt(individual) {
+// Family-only feature (CLAUDE.md Known Issues #13): staff/admin themselves
+// never see or write Korean — only the family_summary field's language
+// changes, based on the linked family account's own preference, which the
+// caller looks up (Session.jsx/SessionLog.jsx via lib/familyLanguage.js for
+// staff-conducted sessions; FamilySession.jsx already knows its own account's
+// preference for family-conducted ones) and passes in as `familyLanguage`.
+function buildFamilyLanguageInstruction(familyLanguage, { onlyOneField } = {}) {
+  if (familyLanguage !== 'ko') return '';
+
+  return onlyOneField
+    ? '\n\nWrite the family_summary field specifically in Korean — natural, warm, conversational Korean, not a literal word-for-word translation. Every other field (went_well, challenge_noted, goal_moment, suggested_focus) must stay in English, since those are for staff review only.'
+    : '\n\nWrite the family_summary in Korean — natural, warm, conversational Korean, not a literal word-for-word translation.';
+}
+
+function buildAnalysisSystemPrompt(individual, familyLanguage) {
   return `You are a clinical support assistant for staff running AI-assisted communication practice sessions with ${
     individual?.full_name || 'an individual'
   }, whose communication goal is: ${individual?.goals || 'not specified'}.
@@ -73,10 +87,10 @@ You will receive the full transcript of a completed roleplay practice session. I
 
 Analyze only what actually happened in this transcript — never invent details it doesn't support. Call the log_session_analysis tool with your analysis. If a category genuinely doesn't apply, say so briefly and honestly rather than fabricating detail.
 
-Note that the session is always ended by a staff/admin user, so the END SESSION transcript message is not the individual's own words. Do not treat it as a user turn when analyzing the transcript and generating the summary.`;
+Note that the session is always ended by a staff/admin user, so the END SESSION transcript message is not the individual's own words. Do not treat it as a user turn when analyzing the transcript and generating the summary.${buildFamilyLanguageInstruction(familyLanguage, { onlyOneField: true })}`;
 }
 
-function buildFamilySummarySystemPrompt(individual) {
+function buildFamilySummarySystemPrompt(individual, familyLanguage) {
   return `A family member or caregiver just supervised a communication practice roleplay with ${
     individual?.full_name || 'an individual'
   }, whose communication goal is: ${individual?.goals || 'not specified'}.
@@ -85,7 +99,7 @@ You will receive the full transcript. In it, "assistant" turns are the in-charac
 
 Call the log_family_summary tool with a short, warm summary of what happened, written directly for the family — plain language, no clinical or technical terms. Base it only on what actually happened in the transcript.
 
-Note that the session may be ended by a family member or caregiver, so the END SESSION transcript message is not necessarily the individual's own words. Do not assume it is a user turn when analyzing the transcript and generating the summary`;
+Note that the session may be ended by a family member or caregiver, so the END SESSION transcript message is not necessarily the individual's own words. Do not assume it is a user turn when analyzing the transcript and generating the summary${buildFamilyLanguageInstruction(familyLanguage)}`;
 }
 
 export default async function handler(req, res) {
@@ -107,7 +121,11 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired session.' });
   }
 
-  const { sessionId, transcript, individual, mode } = req.body || {};
+  const { sessionId, transcript, individual, mode, familyLanguage } = req.body || {};
+  // Strict allowlist collapse, same discipline as `mode` below — never
+  // echoes the client-supplied value into the prompt directly, only ever
+  // used as a boolean === 'ko' check.
+  const safeFamilyLanguage = familyLanguage === 'ko' ? 'ko' : 'en';
 
   // Ties this analysis to a real sessions row the caller can already read
   // under RLS, so the endpoint can't be used as an unrestricted transcript
@@ -132,8 +150,8 @@ export default async function handler(req, res) {
   const familySummaryOnly = mode === 'family_summary_only';
   const tool = familySummaryOnly ? FAMILY_SUMMARY_TOOL : ANALYSIS_TOOL;
   const systemPrompt = familySummaryOnly
-    ? buildFamilySummarySystemPrompt(individual)
-    : buildAnalysisSystemPrompt(individual);
+    ? buildFamilySummarySystemPrompt(individual, safeFamilyLanguage)
+    : buildAnalysisSystemPrompt(individual, safeFamilyLanguage);
 
   let anthropic;
   try {

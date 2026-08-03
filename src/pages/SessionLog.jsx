@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { logAction } from '../lib/auditLog';
+import { fetchFamilyLanguage } from '../lib/familyLanguage';
 
 // Matches the formatDate() already duplicated in AllSessions.jsx,
 // IndividualProfile.jsx, and FamilyView.jsx — same small per-file helper,
@@ -141,9 +142,14 @@ export default function SessionLog() {
     setGenerateError('');
 
     try {
-      const {
-        data: { session: authSession },
-      } = await supabase.auth.getSession();
+      const [{ data: { session: authSession } }, familyLanguage] = await Promise.all([
+        supabase.auth.getSession(),
+        // Same reasoning as Session.jsx's automatic post-END-SESSION call —
+        // this manual fallback is still a staff-conducted debrief, so only
+        // the family_summary field should switch language, based on the
+        // linked family account's own preference (CLAUDE.md Known Issues #13).
+        fetchFamilyLanguage(backTargetId),
+      ]);
 
       const response = await fetch('/api/debrief', {
         method: 'POST',
@@ -155,6 +161,7 @@ export default function SessionLog() {
         },
         body: JSON.stringify({
           sessionId,
+          familyLanguage,
           transcript: transcript.map(({ role, content }) => ({ role, content })),
           individual: individual || {},
         }),

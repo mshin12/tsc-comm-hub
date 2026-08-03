@@ -16,6 +16,11 @@ import { supabase } from '../lib/supabaseClient';
 export function useAuth() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  // Family accounts' own language preference for the AI conversation +
+  // family-facing UI text (see supabase/family_language_preference.sql).
+  // Defaults to 'en' for every role, including staff/admin, who never get
+  // a way to change it.
+  const [preferredLanguage, setPreferredLanguage] = useState('en');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,15 +28,21 @@ export function useAuth() {
 
     const loadRole = async (sessionUser) => {
       if (!sessionUser) {
-        if (isMounted) setRole(null);
+        if (isMounted) {
+          setRole(null);
+          setPreferredLanguage('en');
+        }
         return;
       }
       const { data } = await supabase
         .from('users')
-        .select('role')
+        .select('role, preferred_language')
         .eq('id', sessionUser.id)
         .single();
-      if (isMounted) setRole(data?.role ?? null);
+      if (isMounted) {
+        setRole(data?.role ?? null);
+        setPreferredLanguage(data?.preferred_language === 'ko' ? 'ko' : 'en');
+      }
     };
 
     // Resolve the current session on mount
@@ -58,7 +69,7 @@ export function useAuth() {
     };
   }, []);
 
-  return { user, role, loading };
+  return { user, role, preferredLanguage, loading };
 }
  
 export default useAuth;

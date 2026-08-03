@@ -8,6 +8,11 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
 ];
 
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'ko', label: '한국어 (Korean)' },
+];
+
 /**
  * Admin-only "invite a new account" form. Calls /api/invite (service-role
  * backed) instead of Supabase Studio's own invite button, so the intended
@@ -18,6 +23,7 @@ export default function InviteUser() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('staff');
+  const [preferredLanguage, setPreferredLanguage] = useState('en');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -50,6 +56,7 @@ export default function InviteUser() {
           email: email.trim(),
           role,
           fullName: fullName.trim() || undefined,
+          preferredLanguage,
         }),
       });
 
@@ -70,6 +77,7 @@ export default function InviteUser() {
       setEmail('');
       setFullName('');
       setRole('staff');
+      setPreferredLanguage('en');
     } catch (err) {
       setError(err.message || 'Could not send the invitation. Please try again.');
     } finally {
@@ -129,7 +137,10 @@ export default function InviteUser() {
           <select
             id="invite-role"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => {
+              setRole(e.target.value);
+              if (e.target.value !== 'family') setPreferredLanguage('en');
+            }}
             disabled={submitting}
             style={styles.input}
           >
@@ -140,6 +151,27 @@ export default function InviteUser() {
             ))}
           </select>
         </div>
+
+        {role === 'family' && (
+          <div style={styles.field}>
+            <label style={styles.label} htmlFor="invite-language">
+              Preferred language
+            </label>
+            <select
+              id="invite-language"
+              value={preferredLanguage}
+              onChange={(e) => setPreferredLanguage(e.target.value)}
+              disabled={submitting}
+              style={styles.input}
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {error && <div style={styles.error}>{error}</div>}
         {success && <div style={styles.success}>{success}</div>}

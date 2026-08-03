@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { logAction } from '../lib/auditLog';
+import { t } from '../lib/familyStrings';
 
 function formatDate(dateString) {
   if (!dateString) return '';
@@ -18,12 +19,47 @@ function formatDate(dateString) {
 
 export default function FamilyView() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, preferredLanguage, loading: authLoading } = useAuth();
 
   const [individual, setIndividual] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // languageOverride is null until the toggle below is clicked once — until
+  // then `language` (derived below, not synced via an effect) just reflects
+  // useAuth()'s preferredLanguage directly. Clicking the toggle sets an
+  // optimistic override immediately, since useAuth() only re-fetches on an
+  // actual auth state change, not on this page's own direct UPDATE to its
+  // row — without it, the toggle would write to the database correctly but
+  // this page wouldn't visibly switch language until a reload. Any OTHER
+  // page (e.g. FamilySession.jsx, reached by navigating away from here)
+  // gets the fresh value automatically via its own independent useAuth()
+  // call on mount, so this override is only needed for this page's own
+  // immediate re-render.
+  const [languageOverride, setLanguageOverride] = useState(null);
+  const [languageSaving, setLanguageSaving] = useState(false);
+  const language = languageOverride ?? preferredLanguage;
+
+  const handleLanguageChange = async (newLanguage) => {
+    if (newLanguage === language || languageSaving || !user) return;
+
+    setLanguageOverride(newLanguage);
+    setLanguageSaving(true);
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ preferred_language: newLanguage })
+      .eq('id', user.id);
+
+    if (updateError) {
+      // Falls back to whatever preferredLanguage actually is, not
+      // necessarily what it was a moment ago.
+      setLanguageOverride(null);
+    }
+
+    setLanguageSaving(false);
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -47,7 +83,7 @@ export default function FamilyView() {
       if (!isMounted) return;
 
       if (individualError || !individualData) {
-        setError('Could not find a linked individual for your account.');
+        setError(t(preferredLanguage, 'noLinkedIndividual'));
         setLoading(false);
         return;
       }
@@ -69,7 +105,7 @@ export default function FamilyView() {
       if (!isMounted) return;
 
       if (sessionsError) {
-        setError('Could not load session history.');
+        setError(t(preferredLanguage, 'couldNotLoadHistory'));
       } else {
         setSessions(sessionsData || []);
       }
@@ -82,7 +118,7 @@ export default function FamilyView() {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, preferredLanguage]);
 
   if (authLoading || loading) {
     return (
@@ -105,35 +141,53 @@ export default function FamilyView() {
 
   return (
     <div style={styles.page}>
+      <div style={styles.languageRow}>
+        <span style={styles.languageLabel}>{t(language, 'languageLabel')}:</span>
+        <button
+          type="button"
+          style={language === 'en' ? styles.languageButtonActive : styles.languageButton}
+          onClick={() => handleLanguageChange('en')}
+          disabled={languageSaving}
+        >
+          English
+        </button>
+        <button
+          type="button"
+          style={language === 'ko' ? styles.languageButtonActive : styles.languageButton}
+          onClick={() => handleLanguageChange('ko')}
+          disabled={languageSaving}
+        >
+          한국어
+        </button>
+      </div>
+
       <div style={styles.hero}>
         <h1 style={styles.heroTitle}>
-          {individual.full_name}'s Communication Journey
+          {t(language, 'journeyTitle', { name: individual.full_name })}
         </h1>
         <button
           type="button"
           style={styles.practiceButton}
           onClick={() => navigate('/family/session')}
         >
-          Start Practicing →
+          {t(language, 'startPracticing')}
         </button>
       </div>
 
       {error && <div style={styles.errorBanner}>{error}</div>}
 
       <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Current Goals</h2>
+        <h2 style={styles.sectionTitle}>{t(language, 'currentGoals')}</h2>
         <p style={styles.goalsText}>
-          {individual.goals || 'Goals will be added by the program team soon.'}
+          {individual.goals || t(language, 'goalsPending')}
         </p>
       </div>
 
       <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Session History</h2>
+        <h2 style={styles.sectionTitle}>{t(language, 'sessionHistory')}</h2>
         {sessions.length === 0 ? (
           !error && (
-            <p style={styles.emptyMessage}>
-              Sessions will appear here after your first visit.
-            </p>
+            <p style={styles.emptyMessage}>{t(language, 'noSessionsYet')}</p>
           )
         ) : (
           <div style={styles.sessionList}>
@@ -144,13 +198,12 @@ export default function FamilyView() {
                 </div>
                 {session.scenario_used && (
                   <div style={styles.sessionField}>
-                    <span style={styles.fieldLabel}>Scenario: </span>
+                    <span style={styles.fieldLabel}>{t(language, 'scenarioLabel')}</span>
                     {session.scenario_used}
                   </div>
                 )}
                 <div style={styles.sessionField}>
-                  {session.family_summary ||
-                    'A summary for this session will be added soon.'}
+                  {session.family_summary || t(language, 'summaryPending')}
                 </div>
               </div>
             ))}
@@ -189,6 +242,39 @@ const styles = {
     backgroundColor: '#f2dede',
     border: '1px solid #ebccd1',
     borderRadius: 4,
+  },
+  languageRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  languageLabel: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#92400e',
+  },
+  languageButton: {
+    padding: '6px 12px',
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#92400e',
+    backgroundColor: '#fff',
+    border: '1px solid #fde68a',
+    borderRadius: 999,
+    cursor: 'pointer',
+  },
+  languageButtonActive: {
+    padding: '6px 12px',
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#fff',
+    backgroundColor: '#d97706',
+    border: '1px solid #d97706',
+    borderRadius: 999,
+    cursor: 'pointer',
   },
   hero: {
     marginBottom: 32,
