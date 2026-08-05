@@ -178,11 +178,6 @@ export default function FamilySession() {
         body: JSON.stringify({
           sessionId: sessionIdToUse,
           mode: 'family_summary_only',
-          // The family member IS this account, so their own preferred
-          // language (already known via useAuth()) is what the summary
-          // should be written in — no lookup needed, unlike the
-          // staff-conducted case (see lib/familyLanguage.js).
-          familyLanguage: preferredLanguage,
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
             .map(({ role, content }) => ({ role, content })),
@@ -202,7 +197,13 @@ export default function FamilySession() {
 
       const { error: updateError } = await supabase
         .from('sessions')
-        .update({ family_summary: data.family_summary || null })
+        .update({
+          family_summary: data.family_summary || null,
+          // Generated unconditionally alongside family_summary regardless
+          // of current preference — see api/debrief.js for why (so a later
+          // language switch doesn't leave this session's summary stale).
+          family_summary_ko: data.family_summary_ko || null,
+        })
         .eq('id', sessionIdToUse);
 
       if (updateError) {

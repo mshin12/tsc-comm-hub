@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { logAction } from '../lib/auditLog';
-import { fetchFamilyLanguage } from '../lib/familyLanguage';
 
 // Matches the formatDate() already duplicated in AllSessions.jsx,
 // IndividualProfile.jsx, and FamilyView.jsx — same small per-file helper,
@@ -44,6 +43,10 @@ export default function SessionLog() {
   const [suggestedFocus, setSuggestedFocus] = useState('');
   const [staffNotes, setStaffNotes] = useState('');
   const [familySummary, setFamilySummary] = useState('');
+  // Not editable in the UI (staff isn't expected to review/write Korean) —
+  // just carried through unchanged from whatever's loaded/generated, so an
+  // unrelated field edit + save never clobbers it.
+  const [familySummaryKo, setFamilySummaryKo] = useState('');
   const [sessionLength, setSessionLength] = useState(
     stateInitialLength != null ? String(stateInitialLength) : ''
   );
@@ -68,7 +71,7 @@ export default function SessionLog() {
       const { data, error: fetchError } = await supabase
         .from('sessions')
         .select(
-          'individual_id, session_date, scenario_used, tier_used, session_length, transcript, went_well, challenge_noted, goal_moment, suggested_focus, staff_notes, family_summary'
+          'individual_id, session_date, scenario_used, tier_used, session_length, transcript, went_well, challenge_noted, goal_moment, suggested_focus, staff_notes, family_summary, family_summary_ko'
         )
         .eq('id', sessionId)
         .single();
@@ -88,6 +91,7 @@ export default function SessionLog() {
       setSuggestedFocus(data.suggested_focus || '');
       setStaffNotes(data.staff_notes || '');
       setFamilySummary(data.family_summary || '');
+      setFamilySummaryKo(data.family_summary_ko || '');
       setSessionLength(
         data.session_length != null
           ? String(data.session_length)
@@ -142,14 +146,9 @@ export default function SessionLog() {
     setGenerateError('');
 
     try {
-      const [{ data: { session: authSession } }, familyLanguage] = await Promise.all([
-        supabase.auth.getSession(),
-        // Same reasoning as Session.jsx's automatic post-END-SESSION call —
-        // this manual fallback is still a staff-conducted debrief, so only
-        // the family_summary field should switch language, based on the
-        // linked family account's own preference (CLAUDE.md Known Issues #13).
-        fetchFamilyLanguage(backTargetId),
-      ]);
+      const {
+        data: { session: authSession },
+      } = await supabase.auth.getSession();
 
       const response = await fetch('/api/debrief', {
         method: 'POST',
@@ -161,7 +160,6 @@ export default function SessionLog() {
         },
         body: JSON.stringify({
           sessionId,
-          familyLanguage,
           transcript: transcript.map(({ role, content }) => ({ role, content })),
           individual: individual || {},
         }),
@@ -179,6 +177,7 @@ export default function SessionLog() {
       setGoalMoment(data.goal_moment || '');
       setSuggestedFocus(data.suggested_focus || '');
       setFamilySummary(data.family_summary || '');
+      setFamilySummaryKo(data.family_summary_ko || '');
     } catch (err) {
       setGenerateError(err.message || 'Could not generate a session summary.');
     } finally {
@@ -231,6 +230,7 @@ export default function SessionLog() {
         suggested_focus: suggestedFocus.trim() || null,
         staff_notes: staffNotes.trim() || null,
         family_summary: familySummary.trim() || null,
+        family_summary_ko: familySummaryKo.trim() || null,
         session_length: sessionLength !== '' ? parseInt(sessionLength, 10) : null,
       })
       .eq('id', sessionId);

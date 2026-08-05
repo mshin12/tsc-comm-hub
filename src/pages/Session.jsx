@@ -6,7 +6,6 @@ import { useAuth } from '../hooks/useAuth';
 import { parseTierNumber } from '../lib/tier';
 import { logAction } from '../lib/auditLog';
 import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
-import { fetchFamilyLanguage } from '../lib/familyLanguage';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import Mascot from '../components/Mascot';
  
@@ -269,15 +268,9 @@ export default function Session() {
     setAnalysisError('');
 
     try {
-      const [{ data: { session } }, familyLanguage] = await Promise.all([
-        supabase.auth.getSession(),
-        // Staff conducts this session entirely in English, but the
-        // family_summary field the debrief produces is what the linked
-        // family account will read — if that account prefers Korean, this
-        // is what makes just that one field come out in Korean without
-        // staff ever touching it themselves (CLAUDE.md Known Issues #13).
-        fetchFamilyLanguage(individual.id),
-      ]);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       const response = await fetch('/api/debrief', {
         method: 'POST',
@@ -289,7 +282,6 @@ export default function Session() {
         },
         body: JSON.stringify({
           sessionId: sessionIdToUse,
-          familyLanguage,
           transcript: transcriptMessages
             .filter((m) => !m.hidden)
             .map(({ role, content }) => ({ role, content })),
@@ -314,6 +306,11 @@ export default function Session() {
           challenge_noted: data.challenge_noted || null,
           goal_moment: data.goal_moment || null,
           family_summary: data.family_summary || null,
+          // Generated unconditionally alongside family_summary regardless
+          // of any family account's current language preference — see
+          // api/debrief.js and lib/familyStrings.js for why (a preference
+          // that changes AFTER generation must not leave stale content).
+          family_summary_ko: data.family_summary_ko || null,
           suggested_focus: data.suggested_focus || null,
         })
         .eq('id', sessionIdToUse);

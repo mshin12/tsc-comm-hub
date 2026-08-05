@@ -49,36 +49,20 @@ $$;
 --    column lock, so the self-service toggle in FamilyView.jsx needs
 --    nothing further here.
 --
---    This policy is for the OTHER direction: staff/admin generating a
---    session debrief for a family's linked individual need to read THAT
---    family account's language preference too, so a Korean-preferring
---    family's session summary comes out in Korean even for a
---    staff-conducted session staff themselves never touch in Korean.
---    "users: read own" doesn't cover this (it's not their own row) — this
---    is what's missing.
---
---    Scoped the same way staff already sees individuals: admin gets any
---    linked family account, staff only the ones for individuals actually
---    assigned to them (mirrors "individuals: staff access"'s
---    auth.uid() = any(assigned_staff) check). Additive — OR'd with
---    "users: read own", never narrows what a family account can already
---    read about themselves.
+-- Superseded, dropped rather than left in place: an earlier version of this
+-- file added "users: staff read linked family" so staff could look up a
+-- linked family account's preference at debrief time and generate
+-- family_summary directly in that language. That design had a real bug —
+-- if the family changed their preference AFTER a summary was already
+-- generated (or the summary predated this feature entirely), the stored
+-- text never updated, since generation only ever happened once. Replaced
+-- by supabase/sessions_family_summary_translation.sql's approach instead:
+-- every debrief now generates BOTH languages up front regardless of
+-- current preference, and the family-facing display picks whichever one
+-- matches the current toggle. Staff no longer need to read anything off a
+-- family account's row at all, so this policy is removed rather than left
+-- around unused.
 drop policy if exists "users: staff read linked family" on public.users;
-create policy "users: staff read linked family"
-on public.users
-for select
-to authenticated
-using (
-  get_my_role() in ('staff', 'admin')
-  and id in (
-    select family_user_id from public.individuals
-    where family_user_id is not null
-    and (
-      get_my_role() = 'admin'
-      or auth.uid() = any(assigned_staff)
-    )
-  )
-);
 
 -- ============================================================
 -- Verify
@@ -88,19 +72,6 @@ select column_name, data_type, column_default, is_nullable
 from information_schema.columns
 where table_schema = 'public' and table_name = 'users' and column_name = 'preferred_language';
 
--- Impersonation check — replace UUIDs with a real staff test account and a
--- family test account linked to one of that staff member's individuals.
-begin;
-
-select set_config(
-  'request.jwt.claims',
-  json_build_object('sub', '<staff-test-account-uuid>', 'role', 'authenticated')::text,
-  true
-);
-set local role authenticated;
-
--- Should now return a row (the linked family account's preferred_language)
--- if that staff account is actually assigned to the individual in question:
-select id, preferred_language from users where id = '<linked-family-account-uuid>';
-
-rollback;
+-- Confirms the superseded policy is actually gone — should return zero rows.
+select policyname from pg_policies
+where schemaname = 'public' and tablename = 'users' and policyname = 'users: staff read linked family';

@@ -97,7 +97,7 @@ export default function FamilyView() {
 
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions_family_view')
-        .select('id, session_date, scenario_used, family_summary')
+        .select('id, session_date, scenario_used, family_summary, family_summary_ko')
         .eq('individual_id', individualData.id)
         .order('session_date', { ascending: false })
         .limit(5);
@@ -203,7 +203,16 @@ export default function FamilyView() {
                   </div>
                 )}
                 <div style={styles.sessionField}>
-                  {session.family_summary || t(language, 'summaryPending')}
+                  {/* Both languages are generated together at debrief time
+                      (see api/debrief.js) specifically so switching this
+                      toggle can pick between them live, with no extra
+                      lookup — instead of only ever reflecting whatever the
+                      preference happened to be at generation time. Older
+                      sessions from before this existed have no Korean
+                      version at all; those fall back to the English one. */}
+                  {(language === 'ko' ? session.family_summary_ko : null) ||
+                    session.family_summary ||
+                    t(language, 'summaryPending')}
                 </div>
               </div>
             ))}
