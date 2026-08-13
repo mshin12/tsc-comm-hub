@@ -56,6 +56,18 @@ const STRINGS = {
     savingSummary: "Saving a summary of today's practice…",
     finishingUp: 'Finishing up…',
     returnToOverview: 'Return to Overview',
+
+    // Live speech coaching (volume meter + opt-in pronunciation check) —
+    // added alongside components/VolumeMeter.jsx and
+    // components/SpeechCheckPanel.jsx, see CLAUDE.md.
+    volumeQuietHint: 'Try speaking a little louder 🔊',
+    checkMySpeech: 'Check My Speech',
+    checkingSpeech: 'Listening — go ahead and say a sentence…',
+    speechCheckError: 'Could not check your speech. Please try again.',
+    speechCheckDismiss: 'Got it',
+    tipSoundedGreat: 'That sounded clear and confident — nice work!',
+    tipSlowerPace: 'Try slowing down just a little — it can make your words easier to follow.',
+    tipFinishThoughts: "Try to finish each sentence all the way through — take your time, there's no rush.",
   },
   ko: {
     journeyTitle: '{name}님의 소통 여정',
@@ -99,6 +111,15 @@ const STRINGS = {
     savingSummary: '오늘의 연습 요약을 저장하는 중…',
     finishingUp: '마무리하는 중…',
     returnToOverview: '개요로 돌아가기',
+
+    volumeQuietHint: '조금 더 크게 말씀해 주세요 🔊',
+    checkMySpeech: '내 발음 확인하기',
+    checkingSpeech: '듣고 있어요 — 문장을 하나 말씀해 보세요…',
+    speechCheckError: '발음을 확인할 수 없습니다. 다시 시도해 주세요.',
+    speechCheckDismiss: '확인했어요',
+    tipSoundedGreat: '명확하고 자신감 있게 말씀하셨어요 — 잘하셨어요!',
+    tipSlowerPace: '조금만 천천히 말해보세요 — 단어를 더 쉽게 알아들을 수 있어요.',
+    tipFinishThoughts: '문장을 끝까지 말해보세요 — 서두르지 않아도 괜찮아요.',
   },
 };
 

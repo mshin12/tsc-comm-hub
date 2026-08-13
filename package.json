@@ -14,6 +14,7 @@
     "@rive-app/canvas": "2.38.5",
     "@rive-app/react-canvas": "^4.29.5",
     "@supabase/supabase-js": "^2.108.2",
+    "microsoft-cognitiveservices-speech-sdk": "^1.51.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1"

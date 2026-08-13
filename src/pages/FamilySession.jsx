@@ -7,6 +7,8 @@ import { parseTierNumber } from '../lib/tier';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
 import { t } from '../lib/familyStrings';
+import VolumeMeter from '../components/VolumeMeter';
+import SpeechCheckPanel from '../components/SpeechCheckPanel';
 
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -56,7 +58,13 @@ export default function FamilySession() {
   const messageListRef = useRef(null);
   const analysisPromiseRef = useRef(null);
 
-  const { isListening, supported: micSupported, toggleListening } = useVoiceInput({
+  const {
+    isListening,
+    supported: micSupported,
+    toggleListening,
+    volumeLevel,
+    volumeHint,
+  } = useVoiceInput({
     onFinalResult: (transcript) =>
       setInputText((prev) => (prev ? prev + ' ' : '') + transcript),
     onInterimResult: setInterimTranscript,
@@ -478,6 +486,7 @@ export default function FamilySession() {
           )}
 
           {!sessionEnded ? (
+            <>
             <div style={styles.inputRow}>
               <textarea
                 value={displayedInputText}
@@ -515,6 +524,13 @@ export default function FamilySession() {
               >
                 {isSending ? t(preferredLanguage, 'sending') : t(preferredLanguage, 'send')}
               </button>
+              {isListening && (
+                <VolumeMeter
+                  level={volumeLevel}
+                  hint={volumeHint}
+                  quietHintText={t(preferredLanguage, 'volumeQuietHint')}
+                />
+              )}
               <button
                 type="button"
                 style={styles.secondaryButton}
@@ -524,6 +540,24 @@ export default function FamilySession() {
                 {t(preferredLanguage, 'donePracticing')}
               </button>
             </div>
+            <div style={styles.speechCheckRow}>
+              <SpeechCheckPanel
+                sessionId={sessionId}
+                lang={preferredLanguage === 'ko' ? 'ko-KR' : 'en-US'}
+                strings={{
+                  checkMySpeech: t(preferredLanguage, 'checkMySpeech'),
+                  checkingSpeech: t(preferredLanguage, 'checkingSpeech'),
+                  speechCheckError: t(preferredLanguage, 'speechCheckError'),
+                  dismiss: t(preferredLanguage, 'speechCheckDismiss'),
+                  tips: {
+                    soundedGreat: t(preferredLanguage, 'tipSoundedGreat'),
+                    slowerPace: t(preferredLanguage, 'tipSlowerPace'),
+                    finishThoughts: t(preferredLanguage, 'tipFinishThoughts'),
+                  },
+                }}
+              />
+            </div>
+            </>
           ) : (
             <div style={styles.debriefPanel}>
               <h2 style={styles.debriefTitle}>{t(preferredLanguage, 'greatJob')}</h2>
@@ -694,6 +728,9 @@ const styles = {
     gap: 8,
     padding: 12,
     borderTop: '1px solid #e5e7eb',
+  },
+  speechCheckRow: {
+    padding: '0 12px 12px',
   },
   textInput: {
     flex: '1 1 200px',

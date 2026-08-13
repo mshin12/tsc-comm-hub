@@ -9,10 +9,107 @@ import { useEffect, useRef, useState } from 'react';
 // onInterimResult(text) fires repeatedly with the current in-progress guess
 // for whatever's being spoken right now, so callers can show it as a live,
 // replaceable preview (it isn't final yet and may still change).
+
+// Volume metering thresholds — how quiet, and for how long, before surfacing
+// a "speak a little louder" hint. Tuned by ear against a laptop mic during
+// development, not against real target-device hardware (phone mics, a
+// distant/lapel mic in a session room) — treat as a starting point that may
+// need adjustment after a real pilot, same caveat as the mobile/PWA work in
+// CLAUDE.md.
+const QUIET_VOLUME_THRESHOLD = 0.08;
+const QUIET_HINT_DELAY_MS = 1500;
+
 export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [supported, setSupported] = useState(false);
   const recognitionRef = useRef(null);
+
+  // Live mic-input level (0-1) plus a debounced "it's been quiet for a
+  // while" flag, both purely client-side (Web Audio API, no network/API
+  // cost) — separate from SpeechRecognition itself, which doesn't expose
+  // amplitude data. This opens its own getUserMedia stream in parallel with
+  // whatever SpeechRecognition is doing internally; running two independent
+  // consumers of the same mic is a standard, supported pattern (this is not
+  // two competing speech recognizers, just one recognizer plus a passive
+  // amplitude reading), but it hasn't been verified on real phone hardware —
+  // see CLAUDE.md's live-speech-coaching section.
+  const [volumeLevel, setVolumeLevel] = useState(0);
+  const [volumeHint, setVolumeHint] = useState('');
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const micStreamRef = useRef(null);
+  const meterRafRef = useRef(null);
+  const belowThresholdSinceRef = useRef(null);
+
+  const stopVolumeMetering = () => {
+    if (meterRafRef.current) cancelAnimationFrame(meterRafRef.current);
+    meterRafRef.current = null;
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    belowThresholdSinceRef.current = null;
+    setVolumeLevel(0);
+    setVolumeHint('');
+  };
+
+  const startVolumeMetering = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const data = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteTimeDomainData(data);
+
+        let sumSquares = 0;
+        for (let i = 0; i < data.length; i++) {
+          const normalized = (data[i] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        // Typical conversational speech sits well under a raw RMS of 1 —
+        // scaled up so normal speaking volume reads as a mostly-full meter
+        // rather than a barely-visible sliver.
+        const rms = Math.sqrt(sumSquares / data.length);
+        setVolumeLevel(Math.min(rms * 4, 1));
+
+        const now = Date.now();
+        if (rms < QUIET_VOLUME_THRESHOLD) {
+          if (belowThresholdSinceRef.current === null) belowThresholdSinceRef.current = now;
+          if (now - belowThresholdSinceRef.current > QUIET_HINT_DELAY_MS) {
+            setVolumeHint('quiet');
+          }
+        } else {
+          belowThresholdSinceRef.current = null;
+          setVolumeHint('');
+        }
+
+        meterRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (err) {
+      // The meter is a nice-to-have, not required for speech recognition
+      // itself (which manages its own mic access independently) — fail
+      // silently and just skip the meter rather than blocking voice input.
+      console.error('Could not start volume metering:', err);
+    }
+  };
 
   // Read once at mount via a ref, same as the callbacks below — this hook
   // creates its SpeechRecognition instance exactly once (mount-only effect),
@@ -90,6 +187,7 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
         }
       } else {
         setIsListening(false);
+        stopVolumeMetering();
       }
     };
 
@@ -100,6 +198,7 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
       if (event.error === 'no-speech' || event.error === 'aborted') return;
       isListeningRef.current = false;
       setIsListening(false);
+      stopVolumeMetering();
     };
 
     recognitionRef.current = recognition;
@@ -108,6 +207,7 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     return () => {
       isListeningRef.current = false;
       recognition.stop();
+      stopVolumeMetering();
     };
   }, []);
 
@@ -122,13 +222,15 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
       // and finalize whatever phrase is already in progress before ending
       // — the last bit of speech still arrives via onFinalResult.
       recognition.stop();
+      stopVolumeMetering();
     } else {
       isListeningRef.current = true;
       setIsListening(true);
       onInterimResultRef.current?.('');
       recognition.start();
+      startVolumeMetering();
     }
   };
 
-  return { isListening, supported, toggleListening };
+  return { isListening, supported, toggleListening, volumeLevel, volumeHint };
 }

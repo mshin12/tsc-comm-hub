@@ -8,6 +8,7 @@ import { logAction } from '../lib/auditLog';
 import { fetchRecentSuggestedFocus } from '../lib/recentFocus';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import Mascot from '../components/Mascot';
+import VolumeMeter from '../components/VolumeMeter';
  
 const END_SESSION_KEYWORD = 'END SESSION';
 
@@ -176,7 +177,13 @@ export default function Session() {
     }
   }, [messages, revealedText]);
 
-  const { isListening, supported: micSupported, toggleListening } = useVoiceInput({
+  const {
+    isListening,
+    supported: micSupported,
+    toggleListening,
+    volumeLevel,
+    volumeHint,
+  } = useVoiceInput({
     onFinalResult: (transcript) =>
       setInputText((prev) => (prev ? prev + ' ' : '') + transcript),
     onInterimResult: setInterimTranscript,
@@ -669,6 +676,13 @@ export default function Session() {
               >
                 {isSending ? 'Sending...' : 'Send'}
               </button>
+              {isListening && (
+                <VolumeMeter
+                  level={volumeLevel}
+                  hint={volumeHint}
+                  quietHintText="Try speaking a little louder 🔊"
+                />
+              )}
               <button
                 type="button"
                 style={styles.secondaryButton}
