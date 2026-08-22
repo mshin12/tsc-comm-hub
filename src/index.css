@@ -40,6 +40,23 @@
   }
 }
 
+html {
+  /* Reserves the vertical scrollbar's width permanently, whether or not
+     the page is currently tall enough to need one. Without this, every
+     time page content grows/shrinks enough to cross the scrollbar
+     threshold — a new chat message appearing, the AI's reply streaming in,
+     the mic's live volume meter/"Listening…" state changing height — the
+     browser's own scrollbar toggles on/off, changing the viewport's
+     available width out from under #root's `margin: 0 auto` centering.
+     #root's border-inline doesn't actually change width, but it visibly
+     shifts position as a result — this is what fixes the reported
+     "the border of the whole interface moves as the AI responds / while
+     recording" bug. `scroll` (not `stable`, which isn't supported by
+     Safari on iPad, the exact device this app has had mic issues on) is
+     the broadly-compatible way to reserve the same space everywhere. */
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
 }

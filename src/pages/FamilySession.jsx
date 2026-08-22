@@ -61,7 +61,9 @@ export default function FamilySession() {
   const {
     isListening,
     supported: micSupported,
+    meteringSupported: micMeteringSupported,
     toggleListening,
+    startListening,
     volumeLevel,
     volumeHint,
   } = useVoiceInput({
@@ -328,6 +330,13 @@ export default function FamilySession() {
       if (isEndSession) {
         setSessionEnded(true);
         analysisPromiseRef.current = runFamilySummary(activeSessionId, finalMessages);
+      } else if (micSupported) {
+        // Hands the mic back on automatically once the AI's reply has
+        // rendered, so a hands-free back-and-forth doesn't need the mic
+        // button pressed every turn. No mascot/audio here (family
+        // self-practice has no TTS voice), so "the AI stops speaking" just
+        // means the reply text has arrived.
+        startListening();
       }
     } catch (err) {
       setChatError(err.message || t(preferredLanguage, 'somethingWentWrong'));
@@ -437,6 +446,24 @@ export default function FamilySession() {
 
       {sessionActive && (
         <div style={styles.chatPanel}>
+          {!sessionEnded && (
+            // Its own row, physically away from the mic button in
+            // inputRow below — this used to sit right next to the mic and
+            // risked being tapped by accident instead of it.
+            <div style={styles.chatPanelHeader}>
+              <span style={styles.chatPanelHeaderLabel}>
+                {t(preferredLanguage, 'sessionInProgress')}
+              </span>
+              <button
+                type="button"
+                style={styles.endSessionButton}
+                onClick={handleFinishClick}
+                disabled={isSending || isListening}
+              >
+                {t(preferredLanguage, 'donePracticing')}
+              </button>
+            </div>
+          )}
           <div style={styles.messageList} ref={messageListRef}>
             {messages.filter((m) => !m.hidden).length === 0 && !isSending && (
               <div style={styles.emptyChat}>{t(preferredLanguage, 'gettingReady')}</div>
@@ -520,25 +547,27 @@ export default function FamilySession() {
                 type="button"
                 style={styles.primaryButton}
                 onClick={handleSend}
-                disabled={isSending || isListening || !inputText.trim()}
+                // Deliberately NOT disabled while isListening — pressing
+                // Send mid-recording is how a message gets sent without
+                // stopping the mic first. inputText only holds already-
+                // finalized speech (the live interim guess is preview-only),
+                // so this can never send a half-recognized word.
+                disabled={isSending || !inputText.trim()}
               >
                 {isSending ? t(preferredLanguage, 'sending') : t(preferredLanguage, 'send')}
               </button>
-              {isListening && (
+              {isListening && micMeteringSupported && (
                 <VolumeMeter
                   level={volumeLevel}
                   hint={volumeHint}
                   quietHintText={t(preferredLanguage, 'volumeQuietHint')}
                 />
               )}
-              <button
-                type="button"
-                style={styles.secondaryButton}
-                onClick={handleFinishClick}
-                disabled={isSending || isListening}
-              >
-                {t(preferredLanguage, 'donePracticing')}
-              </button>
+              {isListening && (
+                <span style={styles.listeningHint}>
+                  {t(preferredLanguage, 'listeningHint')}
+                </span>
+              )}
             </div>
             <div style={styles.speechCheckRow}>
               <SpeechCheckPanel
@@ -666,6 +695,32 @@ const styles = {
     overflow: 'hidden',
     backgroundColor: '#fff',
   },
+  chatPanelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    padding: '10px 14px',
+    borderBottom: '1px solid #e5e7eb',
+    backgroundColor: '#fffbeb',
+  },
+  chatPanelHeaderLabel: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: '#92400e',
+    textTransform: 'uppercase',
+    letterSpacing: '0.03em',
+  },
+  endSessionButton: {
+    padding: '8px 14px',
+    fontSize: 16,
+    fontWeight: 600,
+    color: '#b45309',
+    backgroundColor: '#fff',
+    border: '1px solid #b45309',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
   // min(400px, 50dvh) instead of a flat 400px — see Session.jsx's identical
   // comment: a fixed pane this tall can push the input row off-screen once
   // a mobile on-screen keyboard shrinks the visible viewport.
@@ -769,15 +824,11 @@ const styles = {
     borderRadius: 4,
     cursor: 'pointer',
   },
-  secondaryButton: {
-    padding: '10px 16px',
-    fontSize: 17,
-    fontWeight: 600,
-    color: '#b45309',
-    backgroundColor: '#fff',
-    border: '1px solid #b45309',
-    borderRadius: 4,
-    cursor: 'pointer',
+  listeningHint: {
+    fontSize: 14,
+    color: '#92400e',
+    fontStyle: 'italic',
+    flexBasis: '100%',
   },
   debriefPanel: {
     padding: 20,

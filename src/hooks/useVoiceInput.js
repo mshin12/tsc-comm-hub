@@ -9,6 +9,18 @@ import { useEffect, useRef, useState } from 'react';
 // onInterimResult(text) fires repeatedly with the current in-progress guess
 // for whatever's being spoken right now, so callers can show it as a live,
 // replaceable preview (it isn't final yet and may still change).
+//
+// Deliberately no silence-based auto-submit: an earlier version of this
+// hook auto-sent a message after a few seconds of mic silence, but that's
+// the same category of mechanism (a voice-activity-detector-style cutoff)
+// that this app's AAC guidance is built to avoid — CLAUDE.md documents at
+// length (Known Issues #10/#19) that AAC users need to be able to pause for
+// as long as they need while composing a response, and ANY fixed silence
+// threshold risks cutting that off. Sending without stopping the mic is
+// still supported (see Session.jsx/FamilySession.jsx's Send button, which
+// no longer requires isListening to be false) — it's just caller-initiated
+// rather than timer-initiated, so it can never fire before the person is
+// actually ready.
 
 // Volume metering thresholds — how quiet, and for how long, before surfacing
 // a "speak a little louder" hint. Tuned by ear against a laptop mic during
@@ -18,6 +30,29 @@ import { useEffect, useRef, useState } from 'react';
 // CLAUDE.md.
 const QUIET_VOLUME_THRESHOLD = 0.08;
 const QUIET_HINT_DELAY_MS = 1500;
+
+// iPadOS Safari (13+) reports itself with a desktop-Safari-style user agent
+// and navigator.platform === 'MacIntel', so a plain UA sniff for "iPad"
+// misses it — the standard workaround is to also check for touch support,
+// which no real Mac has. Used below to skip opening a second independent
+// getUserMedia stream for volume metering on iOS/iPadOS: this app previously
+// shipped that second stream unconditionally (one mic consumer for
+// SpeechRecognition's own internal audio, a second, separate one purely for
+// the volume meter), which works fine on desktop Chrome/Firefox but iPad
+// sessions reported the mic picking up no speech at all — a known class of
+// iOS/WebKit bug where a second concurrent getUserMedia session can starve or
+// silently break whatever audio session SpeechRecognition itself is using.
+// Speech-to-text actually working is far more important than the volume
+// meter nice-to-have, so this trades away the meter on iOS rather than risk
+// the same conflict. Not yet verified against a real iPad — see CLAUDE.md's
+// recurring "no browser-automation / real-device testing available" caveat.
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const iOSLike = /iPad|iPhone|iPod/.test(ua);
+  const iPadOSDesktopUA = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return iOSLike || iPadOSDesktopUA;
+}
 
 export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' } = {}) {
   const [isListening, setIsListening] = useState(false);
@@ -29,10 +64,10 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
   // cost) — separate from SpeechRecognition itself, which doesn't expose
   // amplitude data. This opens its own getUserMedia stream in parallel with
   // whatever SpeechRecognition is doing internally; running two independent
-  // consumers of the same mic is a standard, supported pattern (this is not
-  // two competing speech recognizers, just one recognizer plus a passive
-  // amplitude reading), but it hasn't been verified on real phone hardware —
-  // see CLAUDE.md's live-speech-coaching section.
+  // consumers of the same mic is a standard, supported pattern on desktop
+  // (this is not two competing speech recognizers, just one recognizer plus
+  // a passive amplitude reading) but is skipped on iOS/iPadOS — see
+  // isIOSDevice() above.
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [volumeHint, setVolumeHint] = useState('');
   const audioContextRef = useRef(null);
@@ -59,6 +94,12 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
   };
 
   const startVolumeMetering = async () => {
+    // See isIOSDevice()'s comment: a second getUserMedia stream alongside
+    // SpeechRecognition's own is the suspected cause of iPad sessions
+    // recording no speech at all, so skip it there entirely rather than
+    // risk starving the recognizer's mic access for a nice-to-have meter.
+    if (isIOSDevice()) return;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
@@ -141,6 +182,33 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     onFinalResultRef.current = onFinalResult;
   });
 
+  // Shared by the manual mic-button toggle and anything else that wants to
+  // stop listening (there's no more silence-triggered auto-stop path).
+  const stopListeningInternal = () => {
+    isListeningRef.current = false;
+    setIsListening(false);
+    recognitionRef.current?.stop();
+    stopVolumeMetering();
+  };
+
+  // Shared by the manual mic-button toggle and the auto-restart-after-the-
+  // AI's-turn path (see Session.jsx/FamilySession.jsx) — a no-op if already
+  // listening, so callers don't need to check isListening themselves first.
+  const startListeningInternal = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition || isListeningRef.current) return;
+    isListeningRef.current = true;
+    setIsListening(true);
+    onInterimResultRef.current?.('');
+    try {
+      recognition.start();
+    } catch {
+      // start() throws if a session is already starting/running — safe to
+      // ignore, a start is already in flight.
+    }
+    startVolumeMetering();
+  };
+
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -212,25 +280,32 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
   }, []);
 
   const toggleListening = () => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-
+    if (!recognitionRef.current) return;
     if (isListeningRef.current) {
-      isListeningRef.current = false;
-      setIsListening(false);
-      // .stop() (unlike .abort()) lets the recognizer finish processing
-      // and finalize whatever phrase is already in progress before ending
-      // — the last bit of speech still arrives via onFinalResult.
-      recognition.stop();
-      stopVolumeMetering();
+      // .stop() (unlike .abort()) lets the recognizer finish processing and
+      // finalize whatever phrase is already in progress before ending — the
+      // last bit of speech still arrives via onFinalResult.
+      stopListeningInternal();
     } else {
-      isListeningRef.current = true;
-      setIsListening(true);
-      onInterimResultRef.current?.('');
-      recognition.start();
-      startVolumeMetering();
+      startListeningInternal();
     }
   };
 
-  return { isListening, supported, toggleListening, volumeLevel, volumeHint };
+  // Distinct from toggleListening so callers that want to unconditionally
+  // (re)start listening — e.g. the moment the AI's reply finishes, so the
+  // mic is hot again without anyone having to press it — don't need to
+  // track isListening themselves and risk toggling the mic OFF instead.
+  const startListening = () => {
+    startListeningInternal();
+  };
+
+  return {
+    isListening,
+    supported,
+    meteringSupported: !isIOSDevice(),
+    toggleListening,
+    startListening,
+    volumeLevel,
+    volumeHint,
+  };
 }
