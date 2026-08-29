@@ -64,6 +64,7 @@ export default function FamilySession() {
     meteringSupported: micMeteringSupported,
     toggleListening,
     startListening,
+    stopListening,
     volumeLevel,
     volumeHint,
   } = useVoiceInput({
@@ -350,6 +351,17 @@ export default function FamilySession() {
     const trimmed = inputText.trim();
     if (!trimmed || isSending) return;
 
+    // Stop the mic the instant a message is actually sent, rather than
+    // leaving it running unattended for the whole network round trip —
+    // that idle stretch is exactly when a browser is prone to silently end
+    // the recognition session on its own, which could leave the mic UI
+    // stuck showing "listening" over a recognizer that had actually gone
+    // dead by the time startListening() tried to resume it once the AI's
+    // reply arrived. This doesn't reintroduce "you have to press the mic
+    // to stop it" — the person still never has to press the mic button,
+    // Send just does it for them as a side effect.
+    stopListening();
+
     const isEndSession = isEndSessionText(trimmed);
     const userMessage = { role: 'user', content: trimmed };
     const updatedMessages = [...messages, userMessage];
@@ -361,6 +373,8 @@ export default function FamilySession() {
 
   const handleFinishClick = () => {
     if (isSending) return;
+
+    stopListening();
 
     const userMessage = { role: 'user', content: END_SESSION_KEYWORD };
     const updatedMessages = [...messages, userMessage];

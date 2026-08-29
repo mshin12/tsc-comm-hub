@@ -54,6 +54,29 @@ function isIOSDevice() {
   return iOSLike || iPadOSDesktopUA;
 }
 
+// .start() throws if called while the recognizer hasn't fully finished
+// tearing down a previous session yet — a real race, not a hypothetical
+// one: it's exactly what happens when the browser silently ends a
+// continuous session on its own (see the onend comment below) and this
+// fires again immediately after. Silently swallowing that failure (the old
+// behavior) left `isListening` stuck true over a recognizer that was
+// actually dead, with nothing to ever recover it — a single short retry
+// resolves the normal case (teardown just needed a beat to finish) without
+// masking a genuinely broken recognizer forever, since onerror/onend still
+// fire normally if this second attempt also fails. Module-level (not
+// defined inside the hook) since it closes over nothing but its own
+// params — keeps it a stable reference so referencing it from inside the
+// mount-only effect below doesn't trip react-hooks/exhaustive-deps.
+function attemptStart(recognition, retriesLeft = 1) {
+  try {
+    recognition.start();
+  } catch {
+    if (retriesLeft > 0) {
+      setTimeout(() => attemptStart(recognition, retriesLeft - 1), 300);
+    }
+  }
+}
+
 export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -200,12 +223,7 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     isListeningRef.current = true;
     setIsListening(true);
     onInterimResultRef.current?.('');
-    try {
-      recognition.start();
-    } catch {
-      // start() throws if a session is already starting/running — safe to
-      // ignore, a start is already in flight.
-    }
+    attemptStart(recognition);
     startVolumeMetering();
   };
 
@@ -247,12 +265,7 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     // guarantees "only stops when the user clicks the mic again."
     recognition.onend = () => {
       if (isListeningRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          // start() throws if a session is already starting/running —
-          // safe to ignore, a restart is already in flight.
-        }
+        attemptStart(recognition);
       } else {
         setIsListening(false);
         stopVolumeMetering();
@@ -299,12 +312,27 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     startListeningInternal();
   };
 
+  // Symmetric counterpart to startListening — a no-op if not currently
+  // listening. Used to deterministically stop the mic the instant a
+  // message is sent (see Session.jsx/FamilySession.jsx's handleSend),
+  // rather than leaving the recognizer running unattended for the whole
+  // network-round-trip-plus-TTS wait: that idle stretch is exactly when a
+  // browser is most likely to silently end the session on its own (see
+  // onend above), which previously could leave `isListening` stuck true
+  // over a recognizer that had actually gone dead. Stopping on send and
+  // freshly starting again once the AI's turn is done (startListening)
+  // avoids relying on the recognizer surviving that unattended gap at all.
+  const stopListening = () => {
+    if (isListeningRef.current) stopListeningInternal();
+  };
+
   return {
     isListening,
     supported,
     meteringSupported: !isIOSDevice(),
     toggleListening,
     startListening,
+    stopListening,
     volumeLevel,
     volumeHint,
   };
