@@ -85,12 +85,17 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
   // Live mic-input level (0-1) plus a debounced "it's been quiet for a
   // while" flag, both purely client-side (Web Audio API, no network/API
   // cost) — separate from SpeechRecognition itself, which doesn't expose
-  // amplitude data. This opens its own getUserMedia stream in parallel with
-  // whatever SpeechRecognition is doing internally; running two independent
-  // consumers of the same mic is a standard, supported pattern on desktop
-  // (this is not two competing speech recognizers, just one recognizer plus
-  // a passive amplitude reading) but is skipped on iOS/iPadOS — see
-  // isIOSDevice() above.
+  // amplitude data. This opens its own getUserMedia stream — a second,
+  // independent consumer of the same mic alongside whatever SpeechRecognition
+  // is doing internally (not two competing speech recognizers, just one
+  // recognizer plus a passive amplitude reading). Sequenced to start only
+  // once recognition.onstart confirms the primary stream is actually live
+  // (see below), not fired at the same time as attemptStart() — two
+  // simultaneous getUserMedia requests for the same device is suspected to
+  // be why the mic recorded nothing at all on iPad, and separately on
+  // Windows Chrome/Edge (see isIOSDevice()'s comment and this file's
+  // onstart handler). Still skipped entirely on iOS/iPadOS regardless of
+  // sequencing, as a known-good extra safeguard — see isIOSDevice() above.
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [volumeHint, setVolumeHint] = useState('');
   const audioContextRef = useRef(null);
@@ -122,6 +127,14 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     // recording no speech at all, so skip it there entirely rather than
     // risk starving the recognizer's mic access for a nice-to-have meter.
     if (isIOSDevice()) return;
+    // Idempotency guard: recognition.onstart (below) is what actually
+    // triggers this now, and that event can fire again after a browser-
+    // initiated silent restart (see onend) while a metering stream from
+    // before is still perfectly alive — without this, that would open a
+    // second, redundant getUserMedia stream on top of the first instead of
+    // reusing it, which is exactly the kind of concurrent-stream
+    // contention this function exists to avoid causing in the first place.
+    if (micStreamRef.current) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -223,8 +236,9 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     isListeningRef.current = true;
     setIsListening(true);
     onInterimResultRef.current?.('');
+    // startVolumeMetering() is NOT called here — see recognition.onstart
+    // below for why it's sequenced after, not fired in the same tick.
     attemptStart(recognition);
-    startVolumeMetering();
   };
 
   useEffect(() => {
@@ -241,6 +255,28 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = langRef.current;
+
+    // Fires once the recognition service has actually begun listening — a
+    // more precise signal than "recognition.start() didn't throw" that the
+    // primary mic stream genuinely exists. Volume metering (its own,
+    // separate getUserMedia call) waits for this instead of firing in the
+    // same tick as attemptStart() above, so the two mic acquisitions are
+    // sequenced rather than racing each other for the device. This was a
+    // real, reported bug, not just a hypothetical one: opening both at once
+    // is suspected to be exactly why the mic recorded nothing at all on
+    // iPad (see isIOSDevice()'s comment) — and separately reported doing
+    // the same thing on Windows Chrome/Edge from the very first mic press,
+    // which the iOS-only exemption never covered. Sequencing them fixes
+    // both without having to guess which devices/browsers are affected by
+    // name. Deliberately `onstart`, not the more semantically precise
+    // `onaudiostart` — `onstart` is the one lifecycle event every
+    // implementation of this API has to fire correctly for the API to be
+    // usable at all, so it's the safer one to depend on across browsers
+    // (this app has no automated way to verify event support on Safari,
+    // which this fix must not regress for — see CLAUDE.md).
+    recognition.onstart = () => {
+      startVolumeMetering();
+    };
 
     recognition.onresult = (event) => {
       let interimTranscript = '';
