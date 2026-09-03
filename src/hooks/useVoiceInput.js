@@ -137,7 +137,24 @@ export function useVoiceInput({ onInterimResult, onFinalResult, lang = 'en-US' }
     if (micStreamRef.current) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Explicitly unprocessed (no echo cancellation / noise suppression /
+      // auto-gain), NOT just `{ audio: true }` — Chromium routes a
+      // default-constraints capture through its shared Audio Processing
+      // Module (APM), and SpeechRecognition's own internal stream is
+      // already using that same shared resource. Two independent APM
+      // consumers on the same physical device is a known source of one (or
+      // both) streams coming back silent — reported here as the volume
+      // meter reading zero on both Windows and Mac through Chrome despite
+      // the mic supposedly being "on". Requesting raw, unprocessed audio
+      // for this stream takes it out of the APM path entirely, so it no
+      // longer competes with SpeechRecognition's stream for that resource.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      });
       micStreamRef.current = stream;
 
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
