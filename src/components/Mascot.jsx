@@ -51,6 +51,19 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
   });
  
   const talk = useStateMachineInput(rive, STATE_MACHINE, TALK_INPUT);
+
+  // The Rive input can go stale (its underlying instance already torn down,
+  // e.g. after a re-render/remount) while still being truthy, in which case
+  // setting .value throws "Cannot set properties of null". That animation
+  // flag is cosmetic, so it must never be able to reject say() and leave the
+  // reply's text unrevealed.
+  const setTalking = (value) => {
+    try {
+      if (talk) talk.value = value;
+    } catch (talkError) {
+      console.warn('Mascot talk input unavailable:', talkError);
+    }
+  };
  
   useImperativeHandle(ref, () => ({
     // Returns a promise that resolves when the audio finishes, so callers
@@ -87,7 +100,7 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
       const buf = await res.arrayBuffer();
       const audio = new Audio(URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" })));
 
-      if (talk) talk.value = true;
+      setTalking(true);
 
       const wordBoundaries = [];
       let consumed = 0;
@@ -127,7 +140,7 @@ const Mascot = forwardRef(function Mascot(_props, ref) {
         // playback failure as "show the full text immediately and move on"
         // instead of blocking the conversation on audio that isn't coming.
         const finishWithoutAudio = () => {
-          if (talk) talk.value = false;
+          setTalking(false);
           if (rafId) cancelAnimationFrame(rafId);
           onReveal?.(text);
           resolve();
